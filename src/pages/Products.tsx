@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import type { Product, Supplier, Category } from '../lib/store';
-import { 
-  getProducts, saveProduct, deleteProduct, 
-  getSuppliers, getCategories, saveCategory, deleteCategory 
+import {
+  getProducts, saveProduct, deleteProduct,
+  getSuppliers, getCategories, saveCategory, deleteCategory
 } from '../lib/store';
 import { Modal } from '../components/ui/Modal';
-import { 
-  Trash2, Link as LinkIcon, Image as ImageIcon, 
+import {
+  Trash2, Link as LinkIcon, Image as ImageIcon,
   Tag, ChevronLeft, ChevronRight, Plus
 } from 'lucide-react';
 
@@ -15,43 +15,45 @@ export const Products: React.FC = () => {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | 'all'>('all');
-  
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [newCatName, setNewCatName] = useState('');
 
-  const [formData, setFormData] = useState({ 
-    supplierId: '', 
-    categoryIds: [] as string[], 
-    name: '', 
-    details: '', 
-    imageUrls: [] as string[], 
-    purchaseLink: '' 
+  const [formData, setFormData] = useState({
+    supplierId: '',
+    categoryIds: [] as string[],
+    name: '',
+    details: '',
+    imageUrls: [] as string[],
+    purchaseLink: ''
   });
-  
+
   const [currentImageUrl, setCurrentImageUrl] = useState('');
 
   useEffect(() => {
     loadData();
   }, []);
 
-  const loadData = () => {
-    setProducts(getProducts());
-    setSuppliers(getSuppliers());
-    setCategories(getCategories());
+  const loadData = async () => {
+    const [prods, sups, cats] = await Promise.all([getProducts(), getSuppliers(), getCategories()]);
+    setProducts(prods);
+    setSuppliers(sups);
+    setCategories(cats);
   };
 
-  const handleAddCategory = (e: React.FormEvent) => {
+  const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCatName.trim()) return;
-    saveCategory(newCatName.trim());
+    await saveCategory(newCatName.trim());
     setNewCatName('');
-    setCategories(getCategories());
+    const cats = await getCategories();
+    setCategories(cats);
   };
 
-  const handleDeleteCategory = (id: string) => {
+  const handleDeleteCategory = async (id: string) => {
     if (confirm('¿Eliminar esta categoría? Los productos dejarán de tener este tag.')) {
-      deleteCategory(id);
+      await deleteCategory(id);
       setCategories(prev => prev.filter(c => c.id !== id));
     }
   };
@@ -82,35 +84,35 @@ export const Products: React.FC = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.imageUrls.length === 0 && currentImageUrl.trim()) {
       // Si hay algo en el input pero no se añadió a la lista, lo añadimos automáticamente
       const finalImages = [currentImageUrl.trim()];
-      saveProduct({ ...formData, imageUrls: finalImages });
+      await saveProduct({ ...formData, imageUrls: finalImages });
     } else {
-      saveProduct(formData);
+      await saveProduct(formData);
     }
-    loadData();
+    await loadData();
     setIsModalOpen(false);
     resetForm();
   };
 
   const resetForm = () => {
-    setFormData({ 
-      supplierId: '', 
-      categoryIds: [], 
-      name: '', 
-      details: '', 
-      imageUrls: [], 
-      purchaseLink: '' 
+    setFormData({
+      supplierId: '',
+      categoryIds: [],
+      name: '',
+      details: '',
+      imageUrls: [],
+      purchaseLink: ''
     });
     setCurrentImageUrl('');
   };
 
-  const handleDeleteProduct = (id: string) => {
+  const handleDeleteProduct = async (id: string) => {
     if (confirm('¿Estás seguro de eliminar este producto?')) {
-      deleteProduct(id);
+      await deleteProduct(id);
       setProducts(prev => prev.filter(p => p.id !== id));
     }
   };
@@ -120,8 +122,8 @@ export const Products: React.FC = () => {
     return s ? s.name : 'Desconocido';
   };
 
-  const filteredProducts = selectedCategoryId === 'all' 
-    ? products 
+  const filteredProducts = selectedCategoryId === 'all'
+    ? products
     : products.filter(p => p.categoryIds?.includes(selectedCategoryId));
 
 
@@ -133,14 +135,14 @@ export const Products: React.FC = () => {
           <p className="page-subtitle" style={{ marginBottom: 0 }}>Gestiona tus artículos, categorías y proveedores.</p>
         </div>
         <div style={{ display: 'flex', gap: '1rem' }}>
-          <button 
+          <button
             onClick={() => setIsCategoryModalOpen(true)}
-            style={{ 
-              background: 'rgba(255,255,255,0.05)', 
-              color: 'white', 
-              border: '1px solid var(--surface-border)', 
-              padding: '0.75rem 1.25rem', 
-              borderRadius: 'var(--radius-md)', 
+            style={{
+              background: 'rgba(255,255,255,0.05)',
+              color: 'white',
+              border: '1px solid var(--surface-border)',
+              padding: '0.75rem 1.25rem',
+              borderRadius: 'var(--radius-md)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -149,7 +151,7 @@ export const Products: React.FC = () => {
           >
             <Tag size={18} /> Categorías
           </button>
-          <button 
+          <button
             onClick={() => {
               if (suppliers.length === 0) {
                 alert("Primero debes añadir un proveedor.");
@@ -157,14 +159,14 @@ export const Products: React.FC = () => {
               }
               setIsModalOpen(true);
             }}
-            style={{ 
-              background: 'var(--primary-color)', 
-              color: 'white', 
-              border: 'none', 
-              padding: '0.75rem 1.5rem', 
-              borderRadius: 'var(--radius-md)', 
-              cursor: 'pointer', 
-              fontWeight: 600 
+            style={{
+              background: 'var(--primary-color)',
+              color: 'white',
+              border: 'none',
+              padding: '0.75rem 1.5rem',
+              borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+              fontWeight: 600
             }}
           >
             + Nuevo Producto
@@ -216,9 +218,9 @@ export const Products: React.FC = () => {
           </div>
         ) : (
           filteredProducts.map(product => (
-            <ProductCard 
-              key={product.id} 
-              product={product} 
+            <ProductCard
+              key={product.id}
+              product={product}
               onDelete={handleDeleteProduct}
               supplierName={getSupplierName(product.supplierId)}
               categories={categories}
@@ -233,10 +235,10 @@ export const Products: React.FC = () => {
           <div style={{ display: 'flex', gap: '1rem' }}>
             <div style={{ flex: 1 }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Proveedor</label>
-              <select 
+              <select
                 required
                 value={formData.supplierId}
-                onChange={(e) => setFormData({...formData, supplierId: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, supplierId: e.target.value })}
                 style={{ width: '100%', padding: '0.8rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.3)', color: 'white', outline: 'none' }}
               >
                 <option value="" disabled>Seleccionar...</option>
@@ -247,11 +249,11 @@ export const Products: React.FC = () => {
 
           <div>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Título del Producto</label>
-            <input 
+            <input
               required
-              type="text" 
+              type="text"
               value={formData.name}
-              onChange={(e) => setFormData({...formData, name: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               style={{ width: '100%', padding: '0.8rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.3)', color: 'white', outline: 'none' }}
               placeholder="Ej. Mancuerna Hexagonal 10kg"
             />
@@ -259,11 +261,11 @@ export const Products: React.FC = () => {
 
           <div>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Descripción / Detalles</label>
-            <textarea 
+            <textarea
               required
               rows={3}
               value={formData.details}
-              onChange={(e) => setFormData({...formData, details: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, details: e.target.value })}
               style={{ width: '100%', padding: '0.8rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.3)', color: 'white', outline: 'none', resize: 'vertical' }}
               placeholder="Detalles técnicos, material, color..."
             />
@@ -272,14 +274,14 @@ export const Products: React.FC = () => {
           <div>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Imágenes (URLs)</label>
             <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={currentImageUrl}
                 onChange={(e) => setCurrentImageUrl(e.target.value)}
                 style={{ flex: 1, padding: '0.8rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.3)', color: 'white', outline: 'none' }}
                 placeholder="https://..."
               />
-              <button 
+              <button
                 type="button"
                 onClick={handleAddImage}
                 style={{ padding: '0.8rem', background: 'var(--surface-border)', border: 'none', borderRadius: 'var(--radius-md)', color: 'white', cursor: 'pointer' }}
@@ -291,7 +293,7 @@ export const Products: React.FC = () => {
               {formData.imageUrls.map((url, i) => (
                 <div key={i} style={{ position: 'relative', width: '60px', height: '60px', borderRadius: '4px', overflow: 'hidden', border: '1px solid var(--surface-border)' }}>
                   <img src={url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
-                  <button 
+                  <button
                     onClick={() => removeImage(i)}
                     style={{ position: 'absolute', top: 0, right: 0, background: 'rgba(0,0,0,0.7)', color: 'white', border: 'none', fontSize: '10px', width: '15px', height: '15px', padding: 0, cursor: 'pointer' }}
                   >
@@ -328,17 +330,17 @@ export const Products: React.FC = () => {
 
           <div>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Enlace de Compra (Proveedor)</label>
-            <input 
+            <input
               required
-              type="text" 
+              type="text"
               value={formData.purchaseLink}
-              onChange={(e) => setFormData({...formData, purchaseLink: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, purchaseLink: e.target.value })}
               style={{ width: '100%', padding: '0.8rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.3)', color: 'white', outline: 'none' }}
               placeholder="https://..."
             />
           </div>
 
-          <button 
+          <button
             type="submit"
             style={{ width: '100%', background: 'var(--primary-color)', color: 'white', border: 'none', padding: '1rem', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 700 }}
           >
@@ -351,15 +353,15 @@ export const Products: React.FC = () => {
       <Modal isOpen={isCategoryModalOpen} onClose={() => setIsCategoryModalOpen(false)} title="Gestionar Categorías">
         <form onSubmit={handleAddCategory} style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <input 
-              type="text" 
+            <input
+              type="text"
               value={newCatName}
               onChange={(e) => setNewCatName(e.target.value)}
               placeholder="Nueva categoría..."
               style={{ flex: 1, padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.3)', color: 'white', outline: 'none' }}
             />
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               style={{ padding: '0.75rem 1.5rem', background: 'var(--primary-color)', border: 'none', borderRadius: 'var(--radius-md)', color: 'white', fontWeight: 600, cursor: 'pointer' }}
             >
               Añadir
@@ -370,7 +372,7 @@ export const Products: React.FC = () => {
           {categories.map(cat => (
             <div key={cat.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)' }}>
               <span>{cat.name}</span>
-              <button 
+              <button
                 onClick={() => handleDeleteCategory(cat.id)}
                 style={{ background: 'none', border: 'none', color: 'var(--danger-color)', cursor: 'pointer' }}
               >
@@ -385,8 +387,8 @@ export const Products: React.FC = () => {
 };
 
 // Subcomponent for Product Card with Gallery
-const ProductCard: React.FC<{ 
-  product: Product, 
+const ProductCard: React.FC<{
+  product: Product,
   onDelete: (id: string) => void,
   supplierName: string,
   categories: Category[],
@@ -429,7 +431,7 @@ const ProductCard: React.FC<{
             <span>Sin fotos</span>
           </div>
         )}
-        <button 
+        <button
           onClick={(e) => { e.stopPropagation(); onDelete(product.id); }}
           style={{ position: 'absolute', top: '0.75rem', right: '0.75rem', background: 'rgba(255,59,48,0.2)', color: 'var(--danger-color)', border: 'none', padding: '0.5rem', borderRadius: '50%', cursor: 'pointer', backdropFilter: 'blur(4px)', zIndex: 20 }}
         >
@@ -452,13 +454,13 @@ const ProductCard: React.FC<{
 
         <h3 style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>{product.name}</h3>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1rem', flex: 1, lineHeight: 1.4 }}>{product.details}</p>
-        
+
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 'auto' }}>
           <div>
             <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)' }}>Prov: {supplierName}</span>
-            <a 
-              href={product.purchaseLink.startsWith('http') ? product.purchaseLink : `https://${product.purchaseLink}`} 
-              target="_blank" 
+            <a
+              href={product.purchaseLink.startsWith('http') ? product.purchaseLink : `https://${product.purchaseLink}`}
+              target="_blank"
               rel="noreferrer"
               style={{ color: 'white', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', textDecoration: 'none', marginTop: '0.3rem' }}
             >

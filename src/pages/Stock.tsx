@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  getProducts, getSuppliers, getClients, 
+import {
+  getProducts, getSuppliers, getClients,
   getPurchases, savePurchase, getSales, saveSale,
-  getProductStock, type Product, type Supplier, type Client 
+  getProductStock, type Product, type Supplier, type Client
 } from '../lib/store';
 import { Modal } from '../components/ui/Modal';
-import { 
+import {
   Package, TrendingUp, TrendingDown, Truck
 } from 'lucide-react';
 
@@ -13,6 +13,7 @@ export const Stock: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [productStocks, setProductStocks] = useState<Record<string, number>>({});
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const [isSaleModalOpen, setIsSaleModalOpen] = useState(false);
 
@@ -34,10 +35,17 @@ export const Stock: React.FC = () => {
     loadData();
   }, []);
 
-  const loadData = () => {
-    setProducts(getProducts());
-    setSuppliers(getSuppliers());
-    setClients(getClients());
+  const loadData = async () => {
+    const [prods, sups, cls] = await Promise.all([getProducts(), getSuppliers(), getClients()]);
+    setProducts(prods);
+    setSuppliers(sups);
+    setClients(cls);
+    // precalculate stocks
+    const stocks: Record<string, number> = {};
+    await Promise.all(prods.map(async p => {
+      stocks[p.id] = await getProductStock(p.id);
+    }));
+    setProductStocks(stocks);
   };
 
   const handleAddPurchaseItem = () => {
@@ -54,13 +62,12 @@ export const Stock: React.FC = () => {
     });
   };
 
-  const handleSavePurchase = (e: React.FormEvent) => {
+  const handleSavePurchase = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Prorrateo de envío por valor
+    // prorrateo...
     const itemsTotalValue = purchaseForm.items.reduce((acc, item) => acc + (item.unitCost * item.quantity), 0);
     const shipping = purchaseForm.shippingCost;
-    
+
     const prorratedItems = purchaseForm.items.map(item => {
       const itemTotal = item.unitCost * item.quantity;
       const proportion = itemsTotalValue > 0 ? (itemTotal / itemsTotalValue) : (1 / purchaseForm.items.length);
@@ -71,7 +78,7 @@ export const Stock: React.FC = () => {
       };
     });
 
-    savePurchase({
+    await savePurchase({
       supplierId: purchaseForm.supplierId,
       date: purchaseForm.date,
       shippingCost: shipping,
@@ -80,7 +87,7 @@ export const Stock: React.FC = () => {
     });
 
     setIsPurchaseModalOpen(false);
-    loadData();
+    await loadData();
     setPurchaseForm({
       supplierId: '',
       date: new Date().toISOString().split('T')[0],
@@ -89,11 +96,11 @@ export const Stock: React.FC = () => {
     });
   };
 
-  const handleSaveSale = (e: React.FormEvent) => {
+  const handleSaveSale = async (e: React.FormEvent) => {
     e.preventDefault();
     const total = saleForm.items.reduce((acc, item) => acc + (item.unitPrice * item.quantity), 0);
-    
-    saveSale({
+
+    await saveSale({
       clientId: saleForm.clientId,
       date: saleForm.date,
       items: saleForm.items,
@@ -101,7 +108,7 @@ export const Stock: React.FC = () => {
     });
 
     setIsSaleModalOpen(false);
-    loadData();
+    await loadData();
     setSaleForm({
       clientId: '',
       date: new Date().toISOString().split('T')[0],
@@ -119,13 +126,13 @@ export const Stock: React.FC = () => {
           <p className="page-subtitle" style={{ marginBottom: 0 }}>Control de inventario, compras y ventas.</p>
         </div>
         <div style={{ display: 'flex', gap: '1rem' }}>
-          <button 
+          <button
             onClick={() => setIsPurchaseModalOpen(true)}
             style={{ background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid var(--surface-border)', padding: '0.75rem 1.25rem', borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
           >
             <TrendingUp size={18} color="#4caf50" /> Ingreso (Compra)
           </button>
-          <button 
+          <button
             onClick={() => setIsSaleModalOpen(true)}
             style={{ background: 'var(--primary-color)', color: 'white', border: 'none', padding: '0.75rem 1.5rem', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}
           >
@@ -157,14 +164,14 @@ export const Stock: React.FC = () => {
                 </tr>
               ) : (
                 products.map(p => {
-                  const stock = getProductStock(p.id);
+                  const stock = productStocks[p.id] || 0;
                   return (
                     <tr key={p.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                       <td style={{ padding: '1rem' }}>{p.name}</td>
                       <td style={{ padding: '1rem' }}>
-                        <span style={{ 
-                          padding: '0.2rem 0.6rem', 
-                          borderRadius: '10px', 
+                        <span style={{
+                          padding: '0.2rem 0.6rem',
+                          borderRadius: '10px',
                           background: stock <= 0 ? 'rgba(255,59,48,0.2)' : 'rgba(76,175,80,0.2)',
                           color: stock <= 0 ? '#ff3b30' : '#4caf50',
                           fontSize: '0.85rem'
@@ -188,11 +195,11 @@ export const Stock: React.FC = () => {
           <div style={{ display: 'flex', gap: '1rem' }}>
             <div style={{ flex: 1 }}>
               <label className="label">Proveedor</label>
-              <select 
+              <select
                 required
-                className="input" 
+                className="input"
                 value={purchaseForm.supplierId}
-                onChange={(e) => setPurchaseForm({...purchaseForm, supplierId: e.target.value})}
+                onChange={(e) => setPurchaseForm({ ...purchaseForm, supplierId: e.target.value })}
                 style={{ appearance: 'none' }}
               >
                 <option value="" disabled>Seleccionar...</option>
@@ -201,12 +208,12 @@ export const Stock: React.FC = () => {
             </div>
             <div style={{ flex: 1 }}>
               <label className="label">Fecha</label>
-              <input 
+              <input
                 required
-                type="date" 
-                className="input" 
+                type="date"
+                className="input"
                 value={purchaseForm.date}
-                onChange={(e) => setPurchaseForm({...purchaseForm, date: e.target.value})}
+                onChange={(e) => setPurchaseForm({ ...purchaseForm, date: e.target.value })}
               />
             </div>
           </div>
@@ -215,12 +222,12 @@ export const Stock: React.FC = () => {
             <label className="label">Gastos de Envío (Total Factura)</label>
             <div style={{ position: 'relative' }}>
               <Truck size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input 
-                type="number" 
-                className="input" 
+              <input
+                type="number"
+                className="input"
                 style={{ paddingLeft: '2.75rem' }}
                 value={purchaseForm.shippingCost || ''}
-                onChange={(e) => setPurchaseForm({...purchaseForm, shippingCost: parseFloat(e.target.value)})}
+                onChange={(e) => setPurchaseForm({ ...purchaseForm, shippingCost: parseFloat(e.target.value) })}
                 placeholder="0.00"
               />
             </div>
@@ -246,58 +253,58 @@ export const Stock: React.FC = () => {
                 return (
                   <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', background: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)' }}>
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                      <select 
+                      <select
                         required
-                        className="input" 
+                        className="input"
                         value={item.productId}
                         onChange={(e) => {
                           const newItems = [...purchaseForm.items];
                           newItems[idx].productId = e.target.value;
-                          setPurchaseForm({...purchaseForm, items: newItems});
+                          setPurchaseForm({ ...purchaseForm, items: newItems });
                         }}
                         style={{ flex: 2 }}
                       >
                         <option value="" disabled>Producto...</option>
                         {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                       </select>
-                      <input 
+                      <input
                         required
-                        type="number" 
-                        className="input" 
-                        placeholder="Cant" 
+                        type="number"
+                        className="input"
+                        placeholder="Cant"
                         style={{ flex: 0.7 }}
                         value={item.quantity}
                         onChange={(e) => {
                           const newItems = [...purchaseForm.items];
                           newItems[idx].quantity = parseInt(e.target.value);
-                          setPurchaseForm({...purchaseForm, items: newItems});
+                          setPurchaseForm({ ...purchaseForm, items: newItems });
                         }}
                       />
-                      <input 
+                      <input
                         required
-                        type="number" 
-                        className="input" 
-                        placeholder="Costo Unit." 
+                        type="number"
+                        className="input"
+                        placeholder="Costo Unit."
                         style={{ flex: 1.2 }}
                         value={item.unitCost || ''}
                         onChange={(e) => {
                           const newItems = [...purchaseForm.items];
                           newItems[idx].unitCost = parseFloat(e.target.value);
-                          setPurchaseForm({...purchaseForm, items: newItems});
+                          setPurchaseForm({ ...purchaseForm, items: newItems });
                         }}
                       />
-                      <input 
+                      <input
                         required
-                        type="number" 
-                        className="input" 
-                        placeholder="P. Venta" 
+                        type="number"
+                        className="input"
+                        placeholder="P. Venta"
                         style={{ flex: 1.2 }}
                         title="Precio de venta al público"
                         value={item.salePrice || ''}
                         onChange={(e) => {
                           const newItems = [...purchaseForm.items];
                           newItems[idx].salePrice = parseFloat(e.target.value);
-                          setPurchaseForm({...purchaseForm, items: newItems});
+                          setPurchaseForm({ ...purchaseForm, items: newItems });
                         }}
                       />
                     </div>
@@ -305,9 +312,9 @@ export const Stock: React.FC = () => {
                     {finalCost > 0 && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', paddingLeft: '0.25rem' }}>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Costo real c/ envío:</span>
-                        <span style={{ 
-                          fontSize: '0.85rem', 
-                          fontWeight: 700, 
+                        <span style={{
+                          fontSize: '0.85rem',
+                          fontWeight: 700,
                           color: '#4caf50',
                           background: 'rgba(76,175,80,0.1)',
                           padding: '0.2rem 0.6rem',
@@ -340,11 +347,11 @@ export const Stock: React.FC = () => {
           <div style={{ display: 'flex', gap: '1rem' }}>
             <div style={{ flex: 1 }}>
               <label className="label">Cliente</label>
-              <select 
+              <select
                 required
-                className="input" 
+                className="input"
                 value={saleForm.clientId}
-                onChange={(e) => setSaleForm({...saleForm, clientId: e.target.value})}
+                onChange={(e) => setSaleForm({ ...saleForm, clientId: e.target.value })}
               >
                 <option value="" disabled>Seleccionar...</option>
                 {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -352,7 +359,7 @@ export const Stock: React.FC = () => {
             </div>
             <div style={{ flex: 1 }}>
               <label className="label">Fecha</label>
-              <input required type="date" className="input" value={saleForm.date} onChange={(e) => setSaleForm({...saleForm, date: e.target.value})} />
+              <input required type="date" className="input" value={saleForm.date} onChange={(e) => setSaleForm({ ...saleForm, date: e.target.value })} />
             </div>
           </div>
 
@@ -364,44 +371,44 @@ export const Stock: React.FC = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {saleForm.items.map((item, idx) => (
                 <div key={idx} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                  <select 
+                  <select
                     required
-                    className="input" 
+                    className="input"
                     value={item.productId}
                     onChange={(e) => {
                       const newItems = [...saleForm.items];
                       newItems[idx].productId = e.target.value;
-                      setSaleForm({...saleForm, items: newItems});
+                      setSaleForm({ ...saleForm, items: newItems });
                     }}
                     style={{ flex: 2 }}
                   >
                     <option value="" disabled>Producto...</option>
                     {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
-                  <input 
+                  <input
                     required
-                    type="number" 
-                    className="input" 
-                    placeholder="Q" 
+                    type="number"
+                    className="input"
+                    placeholder="Q"
                     style={{ flex: 0.6 }}
                     value={item.quantity}
                     onChange={(e) => {
                       const newItems = [...saleForm.items];
                       newItems[idx].quantity = parseInt(e.target.value);
-                      setSaleForm({...saleForm, items: newItems});
+                      setSaleForm({ ...saleForm, items: newItems });
                     }}
                   />
-                  <input 
+                  <input
                     required
-                    type="number" 
-                    className="input" 
-                    placeholder="P. Venta" 
+                    type="number"
+                    className="input"
+                    placeholder="P. Venta"
                     style={{ flex: 1 }}
                     value={item.unitPrice || ''}
                     onChange={(e) => {
                       const newItems = [...saleForm.items];
                       newItems[idx].unitPrice = parseFloat(e.target.value);
-                      setSaleForm({...saleForm, items: newItems});
+                      setSaleForm({ ...saleForm, items: newItems });
                     }}
                   />
                 </div>

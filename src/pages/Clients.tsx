@@ -8,43 +8,47 @@ export const Clients: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [formData, setFormData] = useState({ 
-    name: '', 
-    address: '', 
-    schedule: '', 
-    contactName: '', 
-    productHistory: '', 
-    mapLink: '' 
+  const [formData, setFormData] = useState({
+    name: '',
+    address: '',
+    schedule: '',
+    contactName: '',
+    productHistory: '',
+    mapLink: '',
+    phone: ''
   });
 
   useEffect(() => {
-    setClients(getClients());
+    (async () => {
+      const c = await getClients();
+      setClients(c);
+    })();
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newClient = saveClient(formData);
+    const newClient = await saveClient(formData);
     setClients([...clients, newClient]);
     setIsModalOpen(false);
-    setFormData({ 
-      name: '', 
-      address: '', 
-      schedule: '', 
-      contactName: '', 
-      productHistory: '', 
-      mapLink: '' 
+    setFormData({
+      name: '',
+      address: '',
+      schedule: '',
+      contactName: '',
+      productHistory: '',
+      mapLink: '',
+      phone: ''
     });
   };
 
   const handleDelete = async (id: string) => {
     if (confirm('¿Estás seguro de eliminar este cliente?')) {
-      deleteClient(id);
-      // Forzamos una actualización limpia del estado filtrando por ID
+      await deleteClient(id);
       setClients(prevClients => prevClients.filter(c => c.id !== id));
     }
   };
 
-  const filteredClients = clients.filter(client => 
+  const filteredClients = clients.filter(client =>
     client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     client.address.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -55,10 +59,10 @@ export const Clients: React.FC = () => {
         <div style={{ flex: 1, minWidth: '300px' }}>
           <h1 className="page-title">Clientes</h1>
           <p className="page-subtitle" style={{ marginBottom: '1rem' }}>Administra tus gimnasios y salas de pilates asociados.</p>
-          
+
           <div style={{ position: 'relative', maxWidth: '400px' }}>
             <Search size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-            <input 
+            <input
               type="text"
               placeholder="Buscar por nombre o dirección..."
               value={searchTerm}
@@ -78,15 +82,15 @@ export const Clients: React.FC = () => {
             />
           </div>
         </div>
-        <button 
+        <button
           onClick={() => setIsModalOpen(true)}
-          style={{ 
-            background: 'var(--primary-color)', 
-            color: 'white', 
-            border: 'none', 
-            padding: '0.75rem 1.5rem', 
-            borderRadius: 'var(--radius-md)', 
-            cursor: 'pointer', 
+          style={{
+            background: 'var(--primary-color)',
+            color: 'white',
+            border: 'none',
+            padding: '0.75rem 1.5rem',
+            borderRadius: 'var(--radius-md)',
+            cursor: 'pointer',
             fontWeight: 600,
             transition: 'all 0.2s',
             alignSelf: 'flex-start'
@@ -106,24 +110,24 @@ export const Clients: React.FC = () => {
         ) : (
           filteredClients.map(client => (
             <div key={client.id} className="glass-panel animate-fade-in" style={{ padding: '1.5rem', position: 'relative' }}>
-              <button 
+              <button
                 onClick={(e) => { e.stopPropagation(); handleDelete(client.id); }}
                 style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'rgba(255,59,48,0.1)', border: 'none', color: 'var(--danger-color)', cursor: 'pointer', padding: '0.5rem', borderRadius: '50%', display: 'flex', zIndex: 10 }}
               >
                 <Trash2 size={18} />
               </button>
-              
+
               <h3 style={{ fontSize: '1.4rem', color: 'var(--primary-color)', marginBottom: '1rem', paddingRight: '2rem' }}>{client.name}</h3>
-              
+
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', fontSize: '0.95rem' }}>
                   <MapPin size={18} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                   <div>
                     <span style={{ display: 'block' }}>{client.address}</span>
                     {client.mapLink && (
-                      <a 
-                        href={client.mapLink.startsWith('http') ? client.mapLink : `https://${client.mapLink}`} 
-                        target="_blank" 
+                      <a
+                        href={client.mapLink.startsWith('http') ? client.mapLink : `https://${client.mapLink}`}
+                        target="_blank"
                         rel="noreferrer"
                         style={{ color: 'var(--primary-color)', fontSize: '0.85rem', textDecoration: 'underline' }}
                       >
@@ -140,13 +144,13 @@ export const Clients: React.FC = () => {
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.95rem' }}>
                   <User size={18} style={{ color: 'var(--text-muted)' }} />
-                  <span>Contacto: {client.contactName}</span>
+                  <span>Contacto: {client.contactName}{client.phone ? ` · ${client.phone}` : ''}</span>
                 </div>
 
-                <div style={{ 
-                  marginTop: '0.5rem', 
-                  padding: '1rem', 
-                  background: 'rgba(255,255,255,0.03)', 
+                <div style={{
+                  marginTop: '0.5rem',
+                  padding: '1rem',
+                  background: 'rgba(255,255,255,0.03)',
                   borderRadius: 'var(--radius-md)',
                   border: '1px solid var(--surface-border)'
                 }}>
@@ -166,11 +170,11 @@ export const Clients: React.FC = () => {
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
           <div>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Nombre del Gimnasio / Sala</label>
-            <input 
+            <input
               required
-              type="text" 
+              type="text"
               value={formData.name}
-              onChange={(e) => setFormData({...formData, name: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               style={{ width: '100%', padding: '0.8rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.3)', color: 'white', outline: 'none' }}
               placeholder="Ej. Olimpo Fitness"
             />
@@ -179,22 +183,35 @@ export const Clients: React.FC = () => {
           <div style={{ display: 'flex', gap: '1rem' }}>
             <div style={{ flex: 1 }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Contacto</label>
-              <input 
+              <input
                 required
-                type="text" 
+                type="text"
                 value={formData.contactName}
-                onChange={(e) => setFormData({...formData, contactName: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, contactName: e.target.value })}
                 style={{ width: '100%', padding: '0.8rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.3)', color: 'white', outline: 'none' }}
                 placeholder="Nombre del dueño/encargado"
               />
             </div>
             <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Teléfono</label>
+              <input
+                type="text"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                style={{ width: '100%', padding: '0.8rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.3)', color: 'white', outline: 'none' }}
+                placeholder="Ej. +54 9 11 1234 5678"
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <div style={{ flex: 1 }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Horarios</label>
-              <input 
+              <input
                 required
-                type="text" 
+                type="text"
                 value={formData.schedule}
-                onChange={(e) => setFormData({...formData, schedule: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, schedule: e.target.value })}
                 style={{ width: '100%', padding: '0.8rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.3)', color: 'white', outline: 'none' }}
                 placeholder="Lun a Vie 8:00 - 22:00"
               />
@@ -203,11 +220,11 @@ export const Clients: React.FC = () => {
 
           <div>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Dirección</label>
-            <input 
+            <input
               required
-              type="text" 
+              type="text"
               value={formData.address}
-              onChange={(e) => setFormData({...formData, address: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
               style={{ width: '100%', padding: '0.8rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.3)', color: 'white', outline: 'none' }}
               placeholder="Calle y número, Ciudad"
             />
@@ -215,10 +232,10 @@ export const Clients: React.FC = () => {
 
           <div>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Enlace al Mapa (Google Maps)</label>
-            <input 
-              type="text" 
+            <input
+              type="text"
               value={formData.mapLink}
-              onChange={(e) => setFormData({...formData, mapLink: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, mapLink: e.target.value })}
               style={{ width: '100%', padding: '0.8rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.3)', color: 'white', outline: 'none' }}
               placeholder="https://goo.gl/maps/..."
             />
@@ -226,28 +243,28 @@ export const Clients: React.FC = () => {
 
           <div>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Historial de Productos / Notas</label>
-            <textarea 
+            <textarea
               rows={4}
               value={formData.productHistory}
-              onChange={(e) => setFormData({...formData, productHistory: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, productHistory: e.target.value })}
               style={{ width: '100%', padding: '0.8rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.3)', color: 'white', outline: 'none', resize: 'vertical' }}
               placeholder="Listado de compras previas o preferencias del cliente..."
             />
           </div>
 
-          <button 
+          <button
             type="submit"
-            style={{ 
-              marginTop: '0.5rem', 
-              width: '100%', 
-              background: 'var(--primary-color)', 
-              color: 'white', 
-              border: 'none', 
-              padding: '1rem', 
-              borderRadius: 'var(--radius-md)', 
-              cursor: 'pointer', 
+            style={{
+              marginTop: '0.5rem',
+              width: '100%',
+              background: 'var(--primary-color)',
+              color: 'white',
+              border: 'none',
+              padding: '1rem',
+              borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
               fontWeight: 700,
-              fontSize: '1rem' 
+              fontSize: '1rem'
             }}
           >
             Guardar Cliente

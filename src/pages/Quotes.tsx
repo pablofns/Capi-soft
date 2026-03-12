@@ -12,9 +12,9 @@ import {
 
 const STATUS_CONFIG: Record<QuoteStatus, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
   borrador: { label: 'Borrador', color: '#aaa', bg: 'rgba(170,170,170,0.1)', icon: <Clock size={14} /> },
-  enviado:  { label: 'Enviado',  color: '#2196f3', bg: 'rgba(33,150,243,0.1)', icon: <Send size={14} /> },
+  enviado: { label: 'Enviado', color: '#2196f3', bg: 'rgba(33,150,243,0.1)', icon: <Send size={14} /> },
   aprobado: { label: 'Aprobado', color: '#4caf50', bg: 'rgba(76,175,80,0.1)', icon: <CheckCircle size={14} /> },
-  rechazado:{ label: 'Rechazado',color: '#ff3b30', bg: 'rgba(255,59,48,0.1)', icon: <XCircle size={14} /> },
+  rechazado: { label: 'Rechazado', color: '#ff3b30', bg: 'rgba(255,59,48,0.1)', icon: <XCircle size={14} /> },
 };
 
 export const Quotes: React.FC = () => {
@@ -34,12 +34,13 @@ export const Quotes: React.FC = () => {
     items: [{ productId: '', quantity: 1, unitPrice: 0 }]
   });
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { (async () => { await loadData(); })(); }, []);
 
-  const loadData = () => {
-    setClients(getClients());
-    setProducts(getProducts());
-    setQuotes(getQuotes());
+  const loadData = async () => {
+    const [c, p, q] = await Promise.all([getClients(), getProducts(), getQuotes()]);
+    setClients(c);
+    setProducts(p);
+    setQuotes(q);
   };
 
   const handleAddItem = () => {
@@ -50,9 +51,9 @@ export const Quotes: React.FC = () => {
     setFormData({ ...formData, items: formData.items.filter((_, i) => i !== idx) });
   };
 
-  const handleProductSelect = (idx: number, productId: string) => {
+  const handleProductSelect = async (idx: number, productId: string) => {
     const newItems = [...formData.items];
-    const price = getProductLatestSalePrice(productId);
+    const price = await getProductLatestSalePrice(productId);
     newItems[idx] = { ...newItems[idx], productId, unitPrice: price };
     setFormData({ ...formData, items: newItems });
   };
@@ -65,7 +66,7 @@ export const Quotes: React.FC = () => {
   const total = subtotal + shippingAmount;
   const freeShipping = subtotal >= SHIPPING_THRESHOLD;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const quoteData = {
       clientId: formData.clientId,
@@ -77,14 +78,14 @@ export const Quotes: React.FC = () => {
       notes: formData.notes
     };
     if (editingQuote) {
-      updateQuote(editingQuote.id, quoteData);
+      await updateQuote(editingQuote.id, quoteData);
       setViewQuote({ ...quoteData, id: editingQuote.id });
     } else {
-      saveQuote(quoteData);
+      await saveQuote(quoteData);
     }
     setIsModalOpen(false);
     setEditingQuote(null);
-    loadData();
+    await loadData();
     setFormData({
       clientId: '', date: new Date().toISOString().split('T')[0],
       validUntil: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
@@ -104,16 +105,16 @@ export const Quotes: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleStatusChange = (id: string, status: QuoteStatus) => {
-    updateQuoteStatus(id, status);
+  const handleStatusChange = async (id: string, status: QuoteStatus) => {
+    await updateQuoteStatus(id, status);
     setQuotes(prev => prev.map(q => q.id === id ? { ...q, status } : q));
     if (viewQuote?.id === id) setViewQuote(prev => prev ? { ...prev, status } : null);
   };
 
-  const handleDelete = (id: string, e?: React.MouseEvent) => {
+  const handleDelete = async (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (confirm('¿Eliminar este presupuesto?')) {
-      deleteQuote(id);
+      await deleteQuote(id);
       setQuotes(prev => prev.filter(q => q.id !== id));
       if (viewQuote?.id === id) setViewQuote(null);
     }
@@ -447,7 +448,20 @@ export const Quotes: React.FC = () => {
             </div>
           </div>
 
-          <button type="submit" style={{ width: '100%', background: 'var(--primary-color)', color: 'white', border: 'none', padding: '1rem', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 700, fontSize: '1rem' }}>
+          <button
+            type="submit"
+            style={{
+              width: '100%',
+              background: 'var(--primary-color)',
+              color: 'white',
+              border: 'none',
+              padding: '1rem',
+              borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+              fontWeight: 700,
+              fontSize: '1rem'
+            }}
+          >
             Guardar Presupuesto
           </button>
         </form>
