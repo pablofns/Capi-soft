@@ -205,3 +205,71 @@ export const getProductStock = (productId: string): number => {
 
   return bought - sold;
 };
+
+// Helper: obtiene el último precio de venta cargado para un producto
+export const getProductLatestSalePrice = (productId: string): number => {
+  const purchases = getPurchases();
+  let latestPrice = 0;
+  let latestDate = '';
+  for (const purchase of purchases) {
+    const item = purchase.items.find(i => i.productId === productId);
+    if (item && item.salePrice > 0) {
+      if (!latestDate || purchase.date >= latestDate) {
+        latestDate = purchase.date;
+        latestPrice = item.salePrice;
+      }
+    }
+  }
+  return latestPrice;
+};
+
+// Quotes (Presupuestos)
+export type QuoteStatus = 'borrador' | 'enviado' | 'aprobado' | 'rechazado';
+
+export interface QuoteItem {
+  productId: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+export interface Quote {
+  id: string;
+  clientId: string;
+  date: string;
+  validUntil: string;
+  status: QuoteStatus;
+  items: QuoteItem[];
+  totalAmount: number;
+  notes: string;
+}
+
+const QUOTES_KEY = 'capi_quotes';
+
+export const getQuotes = (): Quote[] => {
+  const data = localStorage.getItem(QUOTES_KEY);
+  return data ? JSON.parse(data) : [];
+};
+
+export const saveQuote = (quote: Omit<Quote, 'id'>) => {
+  const quotes = getQuotes();
+  const newQuote = { ...quote, id: uuidv4() };
+  quotes.push(newQuote);
+  localStorage.setItem(QUOTES_KEY, JSON.stringify(quotes));
+  return newQuote;
+};
+
+export const updateQuote = (id: string, quote: Omit<Quote, 'id'>) => {
+  const quotes = getQuotes().map(q => q.id === id ? { ...quote, id } : q);
+  localStorage.setItem(QUOTES_KEY, JSON.stringify(quotes));
+};
+
+export const updateQuoteStatus = (id: string, status: QuoteStatus) => {
+  const quotes = getQuotes().map(q => q.id === id ? { ...q, status } : q);
+  localStorage.setItem(QUOTES_KEY, JSON.stringify(quotes));
+};
+
+export const deleteQuote = (id: string) => {
+  const quotes = getQuotes().filter(q => q.id !== id);
+  localStorage.setItem(QUOTES_KEY, JSON.stringify(quotes));
+};
+
