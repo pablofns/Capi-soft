@@ -7,13 +7,19 @@ export interface Supplier {
   fundamentalData: string;
 }
 
+export interface Category {
+  id: string;
+  name: string;
+}
+
 export interface Product {
   id: string;
   supplierId: string;
+  categoryIds: string[];
   name: string;
   details: string;
   price: number;
-  photoUrl: string;
+  imageUrls: string[];
   purchaseLink: string;
 }
 
@@ -30,6 +36,7 @@ export interface Client {
 const SUPPLIERS_KEY = 'capi_suppliers';
 const PRODUCTS_KEY = 'capi_products';
 const CLIENTS_KEY = 'capi_clients';
+const CATEGORIES_KEY = 'capi_categories';
 
 // Suppliers
 export const getSuppliers = (): Supplier[] => {
@@ -46,6 +53,7 @@ export const saveSupplier = (supplier: Omit<Supplier, 'id'>) => {
 };
 
 export const deleteSupplier = (id: string) => {
+  console.log('Eliminando proveedor:', id);
   const suppliers = getSuppliers().filter(s => s.id !== id);
   localStorage.setItem(SUPPLIERS_KEY, JSON.stringify(suppliers));
 };
@@ -54,10 +62,37 @@ export const getSupplierById = (id: string): Supplier | undefined => {
   return getSuppliers().find(s => s.id === id);
 };
 
+// Categories
+export const getCategories = (): Category[] => {
+  const data = localStorage.getItem(CATEGORIES_KEY);
+  return data ? JSON.parse(data) : [];
+};
+
+export const saveCategory = (name: string) => {
+  const categories = getCategories();
+  const newCategory = { id: uuidv4(), name };
+  categories.push(newCategory);
+  localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
+  return newCategory;
+};
+
+export const deleteCategory = (id: string) => {
+  console.log('Eliminando categoría:', id);
+  const categories = getCategories().filter(c => c.id !== id);
+  localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
+};
+
 // Products
 export const getProducts = (): Product[] => {
   const data = localStorage.getItem(PRODUCTS_KEY);
-  return data ? JSON.parse(data) : [];
+  if (!data) return [];
+  const products = JSON.parse(data);
+  // Migration for old products that used photoUrl instead of imageUrls
+  return products.map((p: any) => ({
+    ...p,
+    imageUrls: p.imageUrls || (p.photoUrl ? [p.photoUrl] : []),
+    categoryIds: p.categoryIds || []
+  }));
 };
 
 export const saveProduct = (product: Omit<Product, 'id'>) => {
@@ -69,6 +104,7 @@ export const saveProduct = (product: Omit<Product, 'id'>) => {
 };
 
 export const deleteProduct = (id: string) => {
+  console.log('Eliminando producto:', id);
   const products = getProducts().filter(p => p.id !== id);
   localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products));
 };
@@ -88,6 +124,7 @@ export const saveClient = (client: Omit<Client, 'id'>) => {
 };
 
 export const deleteClient = (id: string) => {
+  console.log('Eliminando cliente:', id);
   const clients = getClients().filter(c => c.id !== id);
   localStorage.setItem(CLIENTS_KEY, JSON.stringify(clients));
 };

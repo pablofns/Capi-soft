@@ -107,8 +107,8 @@ export const Clients: React.FC = () => {
           filteredClients.map(client => (
             <div key={client.id} className="glass-panel animate-fade-in" style={{ padding: '1.5rem', position: 'relative' }}>
               <button 
-                onClick={() => handleDelete(client.id)}
-                style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', color: 'var(--danger-color)', cursor: 'pointer', opacity: 0.6 }}
+                onClick={(e) => { e.stopPropagation(); handleDelete(client.id); }}
+                style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'rgba(255,59,48,0.1)', border: 'none', color: 'var(--danger-color)', cursor: 'pointer', padding: '0.5rem', borderRadius: '50%', display: 'flex', zIndex: 10 }}
               >
                 <Trash2 size={18} />
               </button>

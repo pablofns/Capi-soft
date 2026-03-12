@@ -24,7 +24,7 @@ export const Suppliers: React.FC = () => {
   const handleDelete = (id: string) => {
     if (confirm('¿Estás seguro de eliminar este proveedor?')) {
       deleteSupplier(id);
-      setSuppliers(suppliers.filter(s => s.id !== id));
+      setSuppliers(prev => prev.filter(s => s.id !== id));
     }
   };
 
@@ -55,7 +55,7 @@ export const Suppliers: React.FC = () => {
             <div key={supplier.id} className="glass-panel animate-fade-in" style={{ padding: '1.5rem', position: 'relative' }}>
               <button 
                 onClick={() => handleDelete(supplier.id)}
-                style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', color: 'var(--danger-color)', cursor: 'pointer', opacity: 0.7 }}
+                style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'rgba(255,59,48,0.1)', border: 'none', color: 'var(--danger-color)', cursor: 'pointer', padding: '0.5rem', borderRadius: '50%', display: 'flex', zIndex: 10 }}
                 title="Eliminar Proveedor"
               >
                 <Trash2 size={18} />
