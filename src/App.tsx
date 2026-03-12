@@ -5,6 +5,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Suppliers } from './pages/Suppliers';
 import { Products } from './pages/Products';
 import { Clients } from './pages/Clients';
+import { Stock } from './pages/Stock';
 
 const App: React.FC = () => {
   return (
@@ -15,6 +16,7 @@ const App: React.FC = () => {
           <Route path="suppliers" element={<Suppliers />} />
           <Route path="products" element={<Products />} />
           <Route path="clients" element={<Clients />} />
+          <Route path="stock" element={<Stock />} />
         </Route>
       </Routes>
     </BrowserRouter>

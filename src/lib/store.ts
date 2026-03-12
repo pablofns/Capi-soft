@@ -33,10 +33,42 @@ export interface Client {
   mapLink: string;
 }
 
+export interface PurchaseItem {
+  productId: string;
+  quantity: number;
+  unitCost: number; // Precio de compra base
+  finalUnitCost?: number; // Precio de compra con envío prorrateado
+}
+
+export interface Purchase {
+  id: string;
+  supplierId: string;
+  date: string;
+  shippingCost: number;
+  items: PurchaseItem[];
+  totalAmount: number;
+}
+
+export interface SaleItem {
+  productId: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+export interface Sale {
+  id: string;
+  clientId: string;
+  date: string;
+  items: SaleItem[];
+  totalAmount: number;
+}
+
 const SUPPLIERS_KEY = 'capi_suppliers';
 const PRODUCTS_KEY = 'capi_products';
 const CLIENTS_KEY = 'capi_clients';
 const CATEGORIES_KEY = 'capi_categories';
+const PURCHASES_KEY = 'capi_purchases';
+const SALES_KEY = 'capi_sales';
 
 // Suppliers
 export const getSuppliers = (): Supplier[] => {
@@ -87,7 +119,6 @@ export const getProducts = (): Product[] => {
   const data = localStorage.getItem(PRODUCTS_KEY);
   if (!data) return [];
   const products = JSON.parse(data);
-  // Migration for old products that used photoUrl instead of imageUrls
   return products.map((p: any) => ({
     ...p,
     imageUrls: p.imageUrls || (p.photoUrl ? [p.photoUrl] : []),
@@ -127,4 +158,50 @@ export const deleteClient = (id: string) => {
   console.log('Eliminando cliente:', id);
   const clients = getClients().filter(c => c.id !== id);
   localStorage.setItem(CLIENTS_KEY, JSON.stringify(clients));
+};
+
+// Purchases
+export const getPurchases = (): Purchase[] => {
+  const data = localStorage.getItem(PURCHASES_KEY);
+  return data ? JSON.parse(data) : [];
+};
+
+export const savePurchase = (purchase: Omit<Purchase, 'id'>) => {
+  const purchases = getPurchases();
+  const newPurchase = { ...purchase, id: uuidv4() };
+  purchases.push(newPurchase);
+  localStorage.setItem(PURCHASES_KEY, JSON.stringify(purchases));
+  return newPurchase;
+};
+
+// Sales
+export const getSales = (): Sale[] => {
+  const data = localStorage.getItem(SALES_KEY);
+  return data ? JSON.parse(data) : [];
+};
+
+export const saveSale = (sale: Omit<Sale, 'id'>) => {
+  const sales = getSales();
+  const newSale = { ...sale, id: uuidv4() };
+  sales.push(newSale);
+  localStorage.setItem(SALES_KEY, JSON.stringify(sales));
+  return newSale;
+};
+
+// Inventory Logic
+export const getProductStock = (productId: string): number => {
+  const purchases = getPurchases();
+  const sales = getSales();
+
+  const bought = purchases.reduce((acc, p) => {
+    const item = p.items.find(i => i.productId === productId);
+    return acc + (item ? item.quantity : 0);
+  }, 0);
+
+  const sold = sales.reduce((acc, s) => {
+    const item = s.items.find(i => i.productId === productId);
+    return acc + (item ? item.quantity : 0);
+  }, 0);
+
+  return bought - sold;
 };

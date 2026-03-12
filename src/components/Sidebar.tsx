@@ -9,6 +9,7 @@ export const Sidebar: React.FC = () => {
     { to: '/suppliers', icon: <Users size={20} />, label: 'Proveedores' },
     { to: '/products', icon: <Package size={20} />, label: 'Productos' },
     { to: '/clients', icon: <Building2 size={20} />, label: 'Clientes' },
+    { to: '/stock', icon: <Package size={20} />, label: 'Stock' },
   ];
 
   return (

@@ -53,7 +53,7 @@ export const Products: React.FC = () => {
   const handleDeleteCategory = (id: string) => {
     if (confirm('¿Eliminar esta categoría? Los productos dejarán de tener este tag.')) {
       deleteCategory(id);
-      setCategories(getCategories());
+      setCategories(prev => prev.filter(c => c.id !== id));
     }
   };
 
