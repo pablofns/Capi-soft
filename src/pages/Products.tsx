@@ -25,7 +25,6 @@ export const Products: React.FC = () => {
     categoryIds: [] as string[], 
     name: '', 
     details: '', 
-    price: 0, 
     imageUrls: [] as string[], 
     purchaseLink: '' 
   });
@@ -103,7 +102,6 @@ export const Products: React.FC = () => {
       categoryIds: [], 
       name: '', 
       details: '', 
-      price: 0, 
       imageUrls: [], 
       purchaseLink: '' 
     });
@@ -126,10 +124,6 @@ export const Products: React.FC = () => {
     ? products 
     : products.filter(p => p.categoryIds?.includes(selectedCategoryId));
 
-  const formattedPrice = new Intl.NumberFormat('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-  });
 
   return (
     <div>
@@ -228,7 +222,6 @@ export const Products: React.FC = () => {
               onDelete={handleDeleteProduct}
               supplierName={getSupplierName(product.supplierId)}
               categories={categories}
-              formattedPrice={formattedPrice}
             />
           ))
         )}
@@ -249,17 +242,6 @@ export const Products: React.FC = () => {
                 <option value="" disabled>Seleccionar...</option>
                 {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Precio al Público</label>
-              <input 
-                required
-                type="number" 
-                value={formData.price || ''}
-                onChange={(e) => setFormData({...formData, price: parseFloat(e.target.value)})}
-                style={{ width: '100%', padding: '0.8rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.3)', color: 'white', outline: 'none' }}
-                placeholder="0.00"
-              />
             </div>
           </div>
 
@@ -408,8 +390,7 @@ const ProductCard: React.FC<{
   onDelete: (id: string) => void,
   supplierName: string,
   categories: Category[],
-  formattedPrice: Intl.NumberFormat
-}> = ({ product, onDelete, supplierName, categories, formattedPrice }) => {
+}> = ({ product, onDelete, supplierName, categories }) => {
   const [currentImgIdx, setCurrentImgIdx] = useState(0);
   const images = product.imageUrls && product.imageUrls.length > 0 ? product.imageUrls : [];
 
@@ -474,10 +455,6 @@ const ProductCard: React.FC<{
         
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 'auto' }}>
           <div>
-            <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '2px' }}>Precio Público</span>
-            <span style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--primary-color)' }}>{formattedPrice.format(product.price)}</span>
-          </div>
-          <div style={{ textAlign: 'right' }}>
             <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)' }}>Prov: {supplierName}</span>
             <a 
               href={product.purchaseLink.startsWith('http') ? product.purchaseLink : `https://${product.purchaseLink}`} 

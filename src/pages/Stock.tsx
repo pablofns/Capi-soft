@@ -21,7 +21,7 @@ export const Stock: React.FC = () => {
     supplierId: '',
     date: new Date().toISOString().split('T')[0],
     shippingCost: 0,
-    items: [{ productId: '', quantity: 1, unitCost: 0 }]
+    items: [{ productId: '', quantity: 1, unitCost: 0, salePrice: 0 }]
   });
 
   const [saleForm, setSaleForm] = useState({
@@ -43,7 +43,7 @@ export const Stock: React.FC = () => {
   const handleAddPurchaseItem = () => {
     setPurchaseForm({
       ...purchaseForm,
-      items: [...purchaseForm.items, { productId: '', quantity: 1, unitCost: 0 }]
+      items: [...purchaseForm.items, { productId: '', quantity: 1, unitCost: 0, salePrice: 0 }]
     });
   };
 
@@ -85,7 +85,7 @@ export const Stock: React.FC = () => {
       supplierId: '',
       date: new Date().toISOString().split('T')[0],
       shippingCost: 0,
-      items: [{ productId: '', quantity: 1, unitCost: 0 }]
+      items: [{ productId: '', quantity: 1, unitCost: 0, salePrice: 0 }]
     });
   };
 
@@ -109,10 +109,7 @@ export const Stock: React.FC = () => {
     });
   };
 
-  const formattedPrice = new Intl.NumberFormat('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-  });
+
 
   return (
     <div>
@@ -148,7 +145,6 @@ export const Stock: React.FC = () => {
               <tr style={{ borderBottom: '1px solid var(--surface-border)', color: 'var(--text-muted)' }}>
                 <th style={{ padding: '1rem' }}>Producto</th>
                 <th style={{ padding: '1rem' }}>Stock</th>
-                <th style={{ padding: '1rem' }}>P. Venta Público</th>
                 <th style={{ padding: '1rem' }}>Último Movimiento</th>
               </tr>
             </thead>
@@ -176,7 +172,6 @@ export const Stock: React.FC = () => {
                           {stock} unidades
                         </span>
                       </td>
-                      <td style={{ padding: '1rem' }}>{formattedPrice.format(p.price)}</td>
                       <td style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>---</td>
                     </tr>
                   );
@@ -240,50 +235,98 @@ export const Stock: React.FC = () => {
               <button type="button" onClick={handleAddPurchaseItem} style={{ color: 'var(--primary-color)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem' }}>+ Agregar Ítem</button>
             </label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {purchaseForm.items.map((item, idx) => (
-                <div key={idx} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                  <select 
-                    required
-                    className="input" 
-                    value={item.productId}
-                    onChange={(e) => {
-                      const newItems = [...purchaseForm.items];
-                      newItems[idx].productId = e.target.value;
-                      setPurchaseForm({...purchaseForm, items: newItems});
-                    }}
-                    style={{ flex: 2 }}
-                  >
-                    <option value="" disabled>Producto...</option>
-                    {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                  <input 
-                    required
-                    type="number" 
-                    className="input" 
-                    placeholder="Cant" 
-                    style={{ flex: 0.8 }}
-                    value={item.quantity}
-                    onChange={(e) => {
-                      const newItems = [...purchaseForm.items];
-                      newItems[idx].quantity = parseInt(e.target.value);
-                      setPurchaseForm({...purchaseForm, items: newItems});
-                    }}
-                  />
-                  <input 
-                    required
-                    type="number" 
-                    className="input" 
-                    placeholder="Costo" 
-                    style={{ flex: 1.2 }}
-                    value={item.unitCost || ''}
-                    onChange={(e) => {
-                      const newItems = [...purchaseForm.items];
-                      newItems[idx].unitCost = parseFloat(e.target.value);
-                      setPurchaseForm({...purchaseForm, items: newItems});
-                    }}
-                  />
-                </div>
-              ))}
+              {purchaseForm.items.map((item, idx) => {
+                // Cálculo del costo final con envío prorrateado en tiempo real
+                const totalValue = purchaseForm.items.reduce((acc, i) => acc + (i.unitCost * i.quantity), 0);
+                const itemTotal = item.unitCost * item.quantity;
+                const proportion = totalValue > 0 ? (itemTotal / totalValue) : (1 / purchaseForm.items.length);
+                const shippingPortion = (purchaseForm.shippingCost * proportion) / Math.max(item.quantity, 1);
+                const finalCost = item.unitCost > 0 ? item.unitCost + shippingPortion : 0;
+
+                return (
+                  <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', background: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <select 
+                        required
+                        className="input" 
+                        value={item.productId}
+                        onChange={(e) => {
+                          const newItems = [...purchaseForm.items];
+                          newItems[idx].productId = e.target.value;
+                          setPurchaseForm({...purchaseForm, items: newItems});
+                        }}
+                        style={{ flex: 2 }}
+                      >
+                        <option value="" disabled>Producto...</option>
+                        {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                      <input 
+                        required
+                        type="number" 
+                        className="input" 
+                        placeholder="Cant" 
+                        style={{ flex: 0.7 }}
+                        value={item.quantity}
+                        onChange={(e) => {
+                          const newItems = [...purchaseForm.items];
+                          newItems[idx].quantity = parseInt(e.target.value);
+                          setPurchaseForm({...purchaseForm, items: newItems});
+                        }}
+                      />
+                      <input 
+                        required
+                        type="number" 
+                        className="input" 
+                        placeholder="Costo Unit." 
+                        style={{ flex: 1.2 }}
+                        value={item.unitCost || ''}
+                        onChange={(e) => {
+                          const newItems = [...purchaseForm.items];
+                          newItems[idx].unitCost = parseFloat(e.target.value);
+                          setPurchaseForm({...purchaseForm, items: newItems});
+                        }}
+                      />
+                      <input 
+                        required
+                        type="number" 
+                        className="input" 
+                        placeholder="P. Venta" 
+                        style={{ flex: 1.2 }}
+                        title="Precio de venta al público"
+                        value={item.salePrice || ''}
+                        onChange={(e) => {
+                          const newItems = [...purchaseForm.items];
+                          newItems[idx].salePrice = parseFloat(e.target.value);
+                          setPurchaseForm({...purchaseForm, items: newItems});
+                        }}
+                      />
+                    </div>
+                    {/* Costo calculado con prorrateo de envío */}
+                    {finalCost > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', paddingLeft: '0.25rem' }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Costo real c/ envío:</span>
+                        <span style={{ 
+                          fontSize: '0.85rem', 
+                          fontWeight: 700, 
+                          color: '#4caf50',
+                          background: 'rgba(76,175,80,0.1)',
+                          padding: '0.2rem 0.6rem',
+                          borderRadius: '8px'
+                        }}>
+                          ${finalCost.toFixed(2)} / unidad
+                        </span>
+                        {item.salePrice > 0 && (
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            → Margen: <strong style={{ color: item.salePrice > finalCost ? '#4caf50' : '#ff3b30' }}>
+                              {((item.salePrice - finalCost) / finalCost * 100).toFixed(1)}%
+                            </strong>
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -328,9 +371,6 @@ export const Stock: React.FC = () => {
                     onChange={(e) => {
                       const newItems = [...saleForm.items];
                       newItems[idx].productId = e.target.value;
-                      // Auto-fill price from product catalog
-                      const p = products.find(prod => prod.id === e.target.value);
-                      if (p) newItems[idx].unitPrice = p.price;
                       setSaleForm({...saleForm, items: newItems});
                     }}
                     style={{ flex: 2 }}

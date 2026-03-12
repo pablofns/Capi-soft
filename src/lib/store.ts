@@ -18,7 +18,6 @@ export interface Product {
   categoryIds: string[];
   name: string;
   details: string;
-  price: number;
   imageUrls: string[];
   purchaseLink: string;
 }
@@ -37,6 +36,7 @@ export interface PurchaseItem {
   productId: string;
   quantity: number;
   unitCost: number; // Precio de compra base
+  salePrice: number; // Precio de venta al público
   finalUnitCost?: number; // Precio de compra con envío prorrateado
 }
 
