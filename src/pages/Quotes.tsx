@@ -7,7 +7,7 @@ import {
 import { Modal } from '../components/ui/Modal';
 import {
   FileText, Plus, Trash2, CheckCircle, XCircle,
-  Send, Clock, Printer, Pencil
+  Send, Clock, Pencil
 } from 'lucide-react';
 
 const STATUS_CONFIG: Record<QuoteStatus, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
@@ -33,6 +33,11 @@ export const Quotes: React.FC = () => {
     notes: '',
     items: [{ productId: '', quantity: 1, unitPrice: 0 }]
   });
+
+  // nuevo: manejo de logo con fallbacks
+  const [logoSrc, setLogoSrc] = useState<string>('/capi.png');
+  const [logoInsta] = useState<string>('/instagram.png');
+  const [logoWhatsapp] = useState<string>('/whatsapp.png');
 
   useEffect(() => { (async () => { await loadData(); })(); }, []);
 
@@ -120,33 +125,215 @@ export const Quotes: React.FC = () => {
     }
   };
 
-  const handlePrint = () => {
-    if (!printRef.current) return;
-    const printContent = printRef.current.innerHTML;
-    const win = window.open('', '_blank');
-    if (!win) return;
-    win.document.write(`
-      <html><head><title>Presupuesto</title>
-      <style>
-        body { font-family: Arial, sans-serif; padding: 2rem; color: #111; }
-        table { width: 100%; border-collapse: collapse; margin-top: 1.5rem; }
-        th { background: #f5f5f5; padding: 0.75rem; text-align: left; font-size: 0.85rem; }
-        td { padding: 0.75rem; border-bottom: 1px solid #eee; }
-        .total { font-size: 1.5rem; font-weight: bold; }
-        .header { display: flex; justify-content: space-between; margin-bottom: 2rem; }
-        h1 { font-size: 1.8rem; margin: 0; }
-        .label { color: #666; font-size: 0.8rem; }
-      </style></head><body>${printContent}</body></html>
-    `);
-    win.document.close();
-    win.print();
-  };
 
   const fmtPrice = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' });
   const fmtDate = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('es-AR');
 
   const getClientName = (id: string) => clients.find(c => c.id === id)?.name || 'Desconocido';
   const getProductName = (id: string) => products.find(p => p.id === id)?.name || 'Desconocido';
+
+  // Helper: obtiene teléfono de cliente y sanea
+  const getClientPhoneSanitized = (clientId: string): string | null => {
+    const client = clients.find(c => c.id === clientId) as any | undefined;
+    if (!client) return null;
+    const raw = (client.phone || client.contactPhone || client.contact_name || '').toString();
+    const digits = raw.replace(/\D/g, '');
+    return digits.length ? digits : null;
+  };
+
+  // helper para sanitizar nombre de archivo
+  const sanitizeFilename = (s: string) => s.replace(/[<>:"/\\|?*\x00-\x1F]/g, '').trim();
+
+  // Genera HTML printable (reusa estructura visible en printRef)
+  const buildPrintableHtml = (q: Quote) => {
+    const itemsHtml = q.items.map(it => `
+      <tr>
+        <td>${getProductName(it.productId)}</td>
+        <td>${it.quantity}</td>
+        <td>${fmtPrice.format(it.unitPrice)}</td>
+        <td>${fmtPrice.format(it.unitPrice * it.quantity)}</td>
+      </tr>
+    `).join('');
+    const subtotalVal = q.items.reduce((acc, it) => acc + it.unitPrice * it.quantity, 0);
+    const shippingVal = q.totalAmount - subtotalVal;
+    return `
+      <html><head><meta charset="utf-8"><title>Presupuesto - Capi Sport Paraná</title>
+      <style>
+        /* usar margen mínimo 1rem */
+        body{font-family:Arial,Helvetica,sans-serif;padding:1rem;color:#111}
+        .header{display:flex;align-items:center;gap:16px;margin-bottom:12px}
+        .logo-presupuesto{width:auto;height:100px;object-fit:cover;}
+        h1{margin:0;font-size:20px;color:#ff5722;font-weight:800}
+        .company-sub{font-size:12px;color:#666;margin-top:4px}
+        .legend{margin:18px 0;padding:12px;background:rgba(0,0,0,0.03);border-radius:8px}
+        table{width:100%;border-collapse:collapse;margin-top:12px}
+        th,td{padding:10px 8px;border-bottom:1px solid #e6e6e6;text-align:left}
+        th{background:#fafafa;font-weight:700}
+        .totals{display:flex;justify-content:flex-end;margin-top:18px}
+      </style>
+      </head>
+      <body>
+        <div class="header">
+          ${logoSrc ? `<img src="${logoSrc}" class="logo-presupuesto" alt="Capi Sport Paraná" />`
+        : `<div style="width:80px;height:80px;border-radius:50%;background:#222;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800">CS</div>`}
+          <div>
+            <h1>Capi Sport Paraná</h1>
+            <div class="company-sub"><img src="${logoWhatsapp}" height="20" alt="Whatsapp" style="margin-bottom: -8px"/>: 343-6989761 · <img src="${logoInsta}" height="20" alt="Instagram" style="margin-bottom: -8px"/>: @capisport.pna</div>
+          </div>
+        </div>
+
+        <div class="legend">Adjuntamos el presupuesto de los elementos solicitados. Queda pendiente el pago y coordinar la entrega.</div>
+
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <div><strong>Cliente:</strong><br/>${getClientName(q.clientId)}</div>
+          <div style="text-align:right"><div><strong>Emitido:</strong> ${fmtDate(q.date)}</div><div><strong>Válido hasta:</strong> ${fmtDate(q.validUntil)}</div></div>
+        </div>
+
+        <table>
+          <thead><tr><th>Producto</th><th>Cantidad</th><th>Precio Unit.</th><th>Subtotal</th></tr></thead>
+          <tbody>${itemsHtml}</tbody>
+        </table>
+
+        <div class="totals">
+          <div style="text-align:right">
+            <div>Subtotal: ${fmtPrice.format(subtotalVal)}</div>
+            <div>Envío: ${fmtPrice.format(shippingVal)}</div>
+            <div style="font-size:18px;font-weight:800;color:#ff5722;margin-top:8px">TOTAL: ${fmtPrice.format(q.totalAmount)}</div>
+          </div>
+        </div>
+
+        ${q.notes ? `<div style="margin-top:18px;color:#666"><strong>Notas:</strong> ${q.notes}</div>` : ''}
+      </body></html>
+    `;
+  };
+
+  // Genera PDF desde la plantilla HTML (intenta html2canvas + jsPDF vía import dinámico)
+  // Devuelve Blob (application/pdf) o null si no es posible generar.
+  const generatePdfFromHtml = async (q: Quote): Promise<Blob | null> => {
+    const html = buildPrintableHtml(q);
+    // crear contenedor off-screen
+    const wrapper = document.createElement('div');
+    wrapper.style.position = 'fixed';
+    wrapper.style.left = '-10000px';
+    wrapper.style.top = '0';
+    wrapper.style.width = '800px'; // ancho base para render
+    wrapper.innerHTML = html;
+    document.body.appendChild(wrapper);
+
+    try {
+      const html2canvasModule = await import('html2canvas');
+      const html2canvas = html2canvasModule.default ?? html2canvasModule;
+      const jspdfModule = await import('jspdf');
+      const { jsPDF } = jspdfModule;
+
+      const canvas = await html2canvas(wrapper, { scale: 2, useCORS: true, logging: false });
+      const imgData = canvas.toDataURL('image/png', 1.0);
+
+      const pdf = new jsPDF('p', 'pt', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      // ajustar imagen al contenido manteniendo márgenes: dejar 1rem (~16px) margen en PDF
+      const marginPx = 16; // 1rem ~= 16px
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const availableWidth = pageWidth - marginPx * 2;
+      const availableHeight = pageHeight - marginPx * 2;
+      const ratio = Math.min(availableWidth / imgWidth, availableHeight / imgHeight);
+      const renderedWidth = imgWidth * ratio;
+      const renderedHeight = imgHeight * ratio;
+      const x = marginPx;
+      const y = marginPx;
+
+      pdf.addImage(imgData, 'PNG', x, y, renderedWidth, renderedHeight);
+      const blob = pdf.output('blob');
+      return blob;
+    } catch (err) {
+      console.warn('generatePdfFromHtml: no fue posible generar PDF (dependencias faltantes o error)', err);
+      return null;
+    } finally {
+      wrapper.remove();
+    }
+  };
+
+  // Compartir por WhatsApp: intenta generar PDF y compartirlo; si falla, fallback a HTML
+  const shareQuoteViaWhatsApp = async (q: Quote) => {
+    const phone = getClientPhoneSanitized(q.clientId);
+    if (!phone) {
+      alert('No se encontró teléfono válido para el cliente. Por favor complete el teléfono en la ficha del cliente.');
+      return;
+    }
+
+    const message = 'Hola! desde Capi Sport Pná. le dejamos el detalle del pedido. Quedamos a la espera de que nos confirmen';
+
+    // filename: "Client Name - YYYY-MM-DD_HHMM.pdf"
+    const clientNameForFile = sanitizeFilename(getClientName(q.clientId) || 'Cliente');
+    const now = new Date();
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const ts = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
+    const pdfFilename = `${clientNameForFile} - ${ts}.pdf`;
+
+    // 1) intentar generar PDF
+    const pdfBlob = await generatePdfFromHtml(q);
+
+    if (pdfBlob) {
+      const pdfFile = new File([pdfBlob], pdfFilename, { type: 'application/pdf' });
+
+      // Intentar compartir archivo (Web Share API)
+      try {
+        const nav: any = navigator;
+        if (nav && typeof nav.canShare === 'function' && nav.canShare({ files: [pdfFile] })) {
+          await nav.share({
+            files: [pdfFile],
+            title: `Presupuesto - Capi Sport Paraná`,
+            text: message
+          });
+          return;
+        }
+      } catch (err) {
+        console.warn('Web Share (PDF) falló', err);
+        // continuar al fallback
+      }
+
+      // Si no se pudo compartir, forzar descarga del PDF y abrir wa.me con mensaje
+      try {
+        const url = URL.createObjectURL(pdfFile);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = pdfFile.name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message + '\n\nAdjunto: (por favor agregue el PDF descargado)')}`;
+        window.open(waUrl, '_blank');
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        return;
+      } catch (err) {
+        console.error('Fallback PDF share failed', err);
+        // continuar a fallback HTML
+      }
+    }
+
+    // 2) Fallback: generar HTML y comportamiento anterior (descarga + wa.me) con filename .html using same base
+    try {
+      const html = buildPrintableHtml(q);
+      const blob = new Blob([html], { type: 'text/html' });
+      const fileName = `${clientNameForFile} - ${ts}.html`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message + '\n\nAdjunto: (por favor agregue el archivo descargado)')}`;
+      window.open(waUrl, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (err) {
+      console.error('Share fallback failed', err);
+      alert('No fue posible compartir automáticamente. Se descargará el archivo para que lo adjunte manualmente.');
+    }
+  };
 
   return (
     <div style={{ display: 'flex', gap: '2rem', height: '100%' }}>
@@ -201,7 +388,6 @@ export const Quotes: React.FC = () => {
       {/* Right: Detail Panel */}
       {viewQuote && (() => {
         const q = viewQuote;
-        const cfg = STATUS_CONFIG[q.status];
         return (
           <div className="glass-panel" style={{ width: '420px', flexShrink: 0, padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', maxHeight: 'calc(100vh - 8rem)', overflowY: 'auto' }}>
             {/* Header */}
@@ -289,48 +475,93 @@ export const Quotes: React.FC = () => {
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button
                 onClick={() => handleEdit(q)}
-                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.85rem', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)', color: 'white', cursor: 'pointer', fontWeight: 600 }}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)', color: 'white', cursor: 'pointer', fontWeight: 600 }}
               >
                 <Pencil size={18} /> Editar
               </button>
+
+              {/* Reemplazado: botón WhatsApp */}
               <button
-                onClick={handlePrint}
-                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.85rem', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)', color: 'white', cursor: 'pointer', fontWeight: 600 }}
+                onClick={() => shareQuoteViaWhatsApp(q)}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#25D366', border: 'none', borderRadius: 'var(--radius-md)', color: 'white', cursor: 'pointer', fontWeight: 700 }}
+                title="Enviar por WhatsApp"
               >
-                <Printer size={18} /> Imprimir
+                <span style={{ fontSize: 18 }}><img src={logoWhatsapp} alt="Whatsapp" height={25} style={{ marginTop: '2px' }} /></span>
               </button>
             </div>
 
             {/* Hidden printable version */}
             <div ref={printRef} style={{ display: 'none' }}>
-              <div className="header">
+              <div className="print-header" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                {logoSrc ? (
+                  <img
+                    src={logoSrc}
+                    alt="Capi Sport Paraná"
+                    className="logo"
+                    style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', border: '3px solid #1f77b4' }}
+                    onError={() => {
+                      // primer fallback -> /logo.png, segundo fallback -> ocultar y mostrar placeholder
+                      if (logoSrc !== '/logo.png') setLogoSrc('/logo.png');
+                      else setLogoSrc('');
+                    }}
+                  />
+                ) : (
+                  <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#222', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>
+                    CS
+                  </div>
+                )}
                 <div>
-                  <h1>Presupuesto</h1>
-                  <p className="label">Fecha: {fmtDate(q.date)} · Válido hasta: {fmtDate(q.validUntil)}</p>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <strong>Cliente:</strong><br />
-                  {getClientName(q.clientId)}
+                  <h1 className="company-title" style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: 'var(--primary-color)' }}>Capi Sport Paraná</h1>
+                  <div className="company-sub" style={{ marginTop: 4, fontSize: '12px', color: '#666' }}>Whatsapp: 343-6989761 · Instagram: @capisport.pna</div>
                 </div>
               </div>
-              <table>
-                <thead><tr><th>Producto</th><th>Cantidad</th><th>Precio Unit.</th><th>Subtotal</th></tr></thead>
-                <tbody>
-                  {q.items.map((item, i) => (
-                    <tr key={i}>
-                      <td>{getProductName(item.productId)}</td>
-                      <td>{item.quantity}</td>
-                      <td>{fmtPrice.format(item.unitPrice)}</td>
-                      <td>{fmtPrice.format(item.unitPrice * item.quantity)}</td>
+
+              <p className="legend" style={{ margin: '12px 0', fontSize: '13px', color: '#333', background: 'rgba(0,0,0,0.03)', padding: '12px', borderRadius: 8 }}>
+                Le adjuntamos el presupuesto de los elementos solicitados. Queda coordinar la aceptación y la entrega.
+              </p>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <div>
+                    <strong>Cliente:</strong><br /> {getClientName(q.clientId)}
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div><strong>Emitido:</strong> {fmtDate(q.date)}</div>
+                    <div><strong>Válido hasta:</strong> {fmtDate(q.validUntil)}</div>
+                  </div>
+                </div>
+
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th>Cantidad</th>
+                      <th>Precio Unit.</th>
+                      <th>Subtotal</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div style={{ marginTop: '2rem', textAlign: 'right' }}>
-                <p className="label">TOTAL</p>
-                <p className="total">{fmtPrice.format(q.totalAmount)}</p>
+                  </thead>
+                  <tbody>
+                    {q.items.map((item, i) => (
+                      <tr key={i}>
+                        <td>{getProductName(item.productId)}</td>
+                        <td>{item.quantity}</td>
+                        <td>{fmtPrice.format(item.unitPrice)}</td>
+                        <td>{fmtPrice.format(item.unitPrice * item.quantity)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                <div style={{ marginTop: 18, display: 'flex', justifyContent: 'flex-end' }}>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 14, color: '#666' }}>Subtotal: {fmtPrice.format(q.items.reduce((acc, it) => acc + it.unitPrice * it.quantity, 0))}</div>
+                    <div style={{ fontSize: 14, color: '#666' }}>Envío: {fmtPrice.format(q.totalAmount - q.items.reduce((acc, it) => acc + it.unitPrice * it.quantity, 0))}</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--primary-color)', marginTop: 8 }}>TOTAL: {fmtPrice.format(q.totalAmount)}</div>
+                  </div>
+                </div>
+
+                {q.notes && <div className="footer-note" style={{ marginTop: 18, fontSize: 12, color: '#666' }}><strong>Notas:</strong> {q.notes}</div>}
               </div>
-              {q.notes && <p style={{ marginTop: '2rem', fontSize: '0.85rem', color: '#666' }}><strong>Notas:</strong> {q.notes}</p>}
             </div>
           </div>
         );

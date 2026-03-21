@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
   getProducts, getSuppliers, getClients,
-  getPurchases, savePurchase, getSales, saveSale,
-  getProductStock, type Product, type Supplier, type Client
+  savePurchase, saveSale,
+  getProductStock, getProductLatestCost, getProductLatestSalePrice, updateLatestPurchaseSalePrice, type Product, type Supplier, type Client
 } from '../lib/store';
 import { Modal } from '../components/ui/Modal';
 import {
-  Package, TrendingUp, TrendingDown, Truck
+  Package, TrendingUp, TrendingDown, Truck, Edit2, Check, X
 } from 'lucide-react';
 
 export const Stock: React.FC = () => {
@@ -14,8 +14,12 @@ export const Stock: React.FC = () => {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [productStocks, setProductStocks] = useState<Record<string, number>>({});
+  const [productCosts, setProductCosts] = useState<Record<string, number>>({});
+  const [productSalePrices, setProductSalePrices] = useState<Record<string, number>>({});
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const [isSaleModalOpen, setIsSaleModalOpen] = useState(false);
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
+  const [tempPrice, setTempPrice] = useState<number>(0);
 
   // Form states
   const [purchaseForm, setPurchaseForm] = useState({
@@ -40,12 +44,24 @@ export const Stock: React.FC = () => {
     setProducts(prods);
     setSuppliers(sups);
     setClients(cls);
-    // precalculate stocks
+    // precalculate stocks, costs and sale prices
     const stocks: Record<string, number> = {};
+    const costs: Record<string, number> = {};
+    const salePrices: Record<string, number> = {};
     await Promise.all(prods.map(async p => {
       stocks[p.id] = await getProductStock(p.id);
+      costs[p.id] = await getProductLatestCost(p.id);
+      salePrices[p.id] = await getProductLatestSalePrice(p.id);
     }));
     setProductStocks(stocks);
+    setProductCosts(costs);
+    setProductSalePrices(salePrices);
+  };
+
+  const handleUpdatePrice = async (productId: string) => {
+    await updateLatestPurchaseSalePrice(productId, tempPrice);
+    setEditingPriceId(null);
+    await loadData();
   };
 
   const handleAddPurchaseItem = () => {
@@ -152,6 +168,8 @@ export const Stock: React.FC = () => {
               <tr style={{ borderBottom: '1px solid var(--surface-border)', color: 'var(--text-muted)' }}>
                 <th style={{ padding: '1rem' }}>Producto</th>
                 <th style={{ padding: '1rem' }}>Stock</th>
+                <th style={{ padding: '1rem' }}>P. Compra</th>
+                <th style={{ padding: '1rem' }}>P. Venta</th>
                 <th style={{ padding: '1rem' }}>Último Movimiento</th>
               </tr>
             </thead>
@@ -178,6 +196,51 @@ export const Stock: React.FC = () => {
                         }}>
                           {stock} unidades
                         </span>
+                      </td>
+                      <td style={{ padding: '1rem' }}>
+                        <span style={{ color: '#4caf50', fontWeight: 600 }}>
+                          ${productCosts[p.id]?.toFixed(2) || '0.00'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '1rem' }}>
+                        {editingPriceId === p.id ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <input
+                              type="number"
+                              className="input"
+                              style={{ width: '80px', padding: '0.4rem' }}
+                              value={tempPrice}
+                              onChange={(e) => setTempPrice(parseFloat(e.target.value))}
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => handleUpdatePrice(p.id)}
+                              style={{ background: 'var(--primary-color)', border: 'none', color: 'white', padding: '0.4rem', borderRadius: '4px', cursor: 'pointer' }}
+                            >
+                              <Check size={14} />
+                            </button>
+                            <button
+                              onClick={() => setEditingPriceId(null)}
+                              style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', padding: '0.4rem', borderRadius: '4px', cursor: 'pointer' }}
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{ fontWeight: 600 }}>${productSalePrices[p.id]?.toFixed(2) || '0.00'}</span>
+                            <button
+                              onClick={() => {
+                                setEditingPriceId(p.id);
+                                setTempPrice(productSalePrices[p.id] || 0);
+                              }}
+                              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.2rem' }}
+                              title="Editar precio de venta"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                          </div>
+                        )}
                       </td>
                       <td style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>---</td>
                     </tr>
