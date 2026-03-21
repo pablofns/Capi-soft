@@ -13,7 +13,7 @@ export const supabase: SupabaseClient = createClient(url, anonKey);
 // Devuelve { ok: true } o { ok: false, error: 'mensaje' }.
 export const pingSupabase = async (): Promise<{ ok: boolean; error?: string }> => {
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('suppliers')
       .select('id')
       .limit(1)
