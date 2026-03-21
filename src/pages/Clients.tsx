@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import type { Client } from '../lib/store';
-import { getClients, saveClient, deleteClient } from '../lib/store';
+import { getClients, saveClient, deleteClient, updateClient } from '../lib/store';
 import { Modal } from '../components/ui/Modal';
-import { Trash2, MapPin, Clock, User, History, Search } from 'lucide-react';
+import { Trash2, MapPin, Clock, User, History, Search, Edit2 } from 'lucide-react';
 
 export const Clients: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingClientId, setEditingClientId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({
     name: '',
@@ -27,9 +28,35 @@ export const Clients: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newClient = await saveClient(formData);
-    setClients([...clients, newClient]);
+    
+    if (editingClientId) {
+      const updatedClient = await updateClient(editingClientId, formData);
+      setClients(clients.map(c => c.id === editingClientId ? updatedClient : c));
+    } else {
+      const newClient = await saveClient(formData);
+      setClients([...clients, newClient]);
+    }
+    
+    handleCloseModal();
+  };
+
+  const handleEdit = (client: Client) => {
+    setEditingClientId(client.id);
+    setFormData({
+      name: client.name,
+      address: client.address,
+      schedule: client.schedule,
+      contactName: client.contactName,
+      productHistory: client.productHistory,
+      mapLink: client.mapLink,
+      phone: client.phone || ''
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
     setIsModalOpen(false);
+    setEditingClientId(null);
     setFormData({
       name: '',
       address: '',
@@ -83,7 +110,7 @@ export const Clients: React.FC = () => {
           </div>
         </div>
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => { setEditingClientId(null); setIsModalOpen(true); }}
           style={{
             background: 'var(--primary-color)',
             color: 'white',
@@ -110,12 +137,20 @@ export const Clients: React.FC = () => {
         ) : (
           filteredClients.map(client => (
             <div key={client.id} className="glass-panel animate-fade-in" style={{ padding: '1.5rem', position: 'relative' }}>
-              <button
-                onClick={(e) => { e.stopPropagation(); handleDelete(client.id); }}
-                style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'rgba(255,59,48,0.1)', border: 'none', color: 'var(--danger-color)', cursor: 'pointer', padding: '0.5rem', borderRadius: '50%', display: 'flex', zIndex: 10 }}
-              >
-                <Trash2 size={18} />
-              </button>
+              <div style={{ position: 'absolute', top: '1rem', right: '1rem', display: 'flex', gap: '0.5rem', zIndex: 10 }}>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleEdit(client); }}
+                  style={{ background: 'rgba(57,144,255,0.1)', border: 'none', color: 'var(--primary-color)', cursor: 'pointer', padding: '0.5rem', borderRadius: '50%', display: 'flex' }}
+                >
+                  <Edit2 size={16} />
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleDelete(client.id); }}
+                  style={{ background: 'rgba(255,59,48,0.1)', border: 'none', color: 'var(--danger-color)', cursor: 'pointer', padding: '0.5rem', borderRadius: '50%', display: 'flex' }}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
 
               <h3 style={{ fontSize: '1.4rem', color: 'var(--primary-color)', marginBottom: '1rem', paddingRight: '2rem' }}>{client.name}</h3>
 
@@ -166,7 +201,7 @@ export const Clients: React.FC = () => {
         )}
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Registrar Cliente">
+      <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={editingClientId ? "Editar Cliente" : "Registrar Cliente"}>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
           <div>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Nombre del Gimnasio / Sala</label>

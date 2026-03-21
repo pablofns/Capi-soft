@@ -266,6 +266,22 @@ export const deleteClient = async (id: string): Promise<void> => {
   }
 };
 
+export const updateClient = async (id: string, client: Omit<Client, 'id'>): Promise<Client> => {
+  try {
+    const dbObj = mapClientToDB(client);
+    const { data, error } = await supabase.from('clients').update(dbObj).eq('id', id).select().single();
+    if (error) throw error;
+    return mapClientFromDB(data);
+  } catch (e) {
+    console.warn('updateClient fallback', e);
+    const clients = JSON.parse(localStorage.getItem(CLIENTS_KEY) || '[]').map((c: any) => 
+      c.id === id ? { ...client, id } : c
+    );
+    localStorage.setItem(CLIENTS_KEY, JSON.stringify(clients));
+    return { ...client, id };
+  }
+};
+
 /* ---------- Purchases (header + items) ---------- */
 export const getPurchases = async (): Promise<Purchase[]> => {
   try {
@@ -399,28 +415,25 @@ export const getProductStock = async (productId: string): Promise<number> => {
   }
 };
 
-/* Helper: obtiene el último precio de venta cargado para un producto (from purchases items) */
+/* Helper: obtiene el último precio de venta cargado para un producto (from purchase_items) */
 export const getProductLatestSalePrice = async (productId: string): Promise<number> => {
   try {
-    // fetch purchase_items joined with purchases by getting purchase_items then purchases dates
-    const { data: items, error: itemsErr } = await supabase.from('purchase_items').select('sale_price, purchase_id').eq('product_id', productId).gt('sale_price', 0);
+    const { data: items, error: itemsErr } = await supabase
+      .from('purchase_items')
+      .select('sale_price')
+      .eq('product_id', productId)
+      .order('id', { ascending: false })
+      .limit(1);
+
     if (itemsErr) throw itemsErr;
-    if (!items || items.length === 0) return 0;
-    // fetch purchases for those ids to get dates
-    const purchaseIds = Array.from(new Set(items.map((it: any) => it.purchase_id)));
-    const { data: purchases, error: pErr } = await supabase.from('purchases').select('id, date').in('id', purchaseIds);
-    if (pErr) throw pErr;
-    // merge to find latest by date
-    const withDate = items.map((it: any) => {
-      const p = (purchases ?? []).find((x: any) => x.id === it.purchase_id);
-      return { sale_price: parseFloat(it.sale_price ?? 0), date: p?.date ?? null };
-    }).filter((x: any) => x.sale_price > 0 && x.date);
-    if (withDate.length === 0) return 0;
-    withDate.sort((a: any, b: any) => (a.date > b.date ? -1 : 1));
-    return withDate[0].sale_price;
+    if (!items || items.length === 0) {
+      // Fallback a la tabla de productos si no hay compras
+      const { data: prod } = await supabase.from('products').select('price').eq('id', productId).single();
+      return prod?.price ?? 0;
+    }
+    return parseFloat(items[0].sale_price ?? 0);
   } catch (e) {
     console.warn('getProductLatestSalePrice fallback', e);
-    // fallback compute from local purchases if present (leer localStorage síncrono)
     const purchases = JSON.parse(localStorage.getItem(PURCHASES_KEY) || '[]');
     let latestPrice = 0;
     let latestDate = '';
@@ -434,6 +447,93 @@ export const getProductLatestSalePrice = async (productId: string): Promise<numb
       }
     }
     return latestPrice;
+  }
+};
+
+/* Helper: obtiene el último costo (unitCost o finalUnitCost) cargado para un producto */
+export const getProductLatestCost = async (productId: string): Promise<number> => {
+  try {
+    const { data: items, error: itemsErr } = await supabase
+      .from('purchase_items')
+      .select('unit_cost, final_unit_cost')
+      .eq('product_id', productId)
+      .order('id', { ascending: false })
+      .limit(1);
+
+    if (itemsErr) throw itemsErr;
+    if (!items || items.length === 0) return 0;
+    
+    const item = items[0];
+    return parseFloat(item.final_unit_cost ?? item.unit_cost ?? 0);
+  } catch (e) {
+    console.warn('getProductLatestCost fallback', e);
+    const purchases = JSON.parse(localStorage.getItem(PURCHASES_KEY) || '[]');
+    let latestCost = 0;
+    let latestDate = '';
+    for (const purchase of purchases) {
+      const item = (purchase.items ?? []).find((i: any) => i.productId === productId);
+      if (item) {
+        if (!latestDate || purchase.date >= latestDate) {
+          latestDate = purchase.date;
+          latestCost = item.finalUnitCost ?? item.unitCost ?? 0;
+        }
+      }
+    }
+    return latestCost;
+  }
+};
+
+export const updateLatestPurchaseSalePrice = async (productId: string, newPrice: number): Promise<void> => {
+  try {
+    // Buscar el ID del ítem más reciente en purchase_items para este producto
+    const { data: items, error: findErr } = await supabase
+      .from('purchase_items')
+      .select('id')
+      .eq('product_id', productId)
+      .order('id', { ascending: false })
+      .limit(1);
+
+    if (findErr) throw findErr;
+    
+    if (items && items.length > 0) {
+      // Actualizar el precio en la compra
+      const { error: updErr } = await supabase
+        .from('purchase_items')
+        .update({ sale_price: newPrice })
+        .eq('id', items[0].id);
+      if (updErr) throw updErr;
+    }
+    
+    // También actualizar el precio base en productos para consistencia
+    await supabase.from('products').update({ price: newPrice }).eq('id', productId);
+  } catch (e) {
+    console.warn('updateLatestPurchaseSalePrice fallback', e);
+    // Local fallback: update product and latest purchase if possible
+    const prods = JSON.parse(localStorage.getItem(PRODUCTS_KEY) || '[]').map((p: any) => 
+      p.id === productId ? { ...p, price: newPrice } : p
+    );
+    localStorage.setItem(PRODUCTS_KEY, JSON.stringify(prods));
+    
+    const purchases = JSON.parse(localStorage.getItem(PURCHASES_KEY) || '[]');
+    let latestId = '';
+    let latestDate = '';
+    for (const p of purchases) {
+       if (!latestDate || p.date >= latestDate) {
+         if (p.items.some((it: any) => it.productId === productId)) {
+           latestDate = p.date;
+           latestId = p.id;
+         }
+       }
+    }
+    if (latestId) {
+       const updatedPurchases = purchases.map((p: any) => {
+         if (p.id === latestId) {
+           return { ...p, items: p.items.map((it: any) => it.productId === productId ? { ...it, salePrice: newPrice } : it) };
+         }
+         return p;
+       });
+       localStorage.setItem(PURCHASES_KEY, JSON.stringify(updatedPurchases));
+    }
   }
 };
 
