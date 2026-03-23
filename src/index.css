@@ -100,7 +100,6 @@ a {
   .main-content {
     height: auto;
     padding: 1rem;
-    padding-bottom: 5rem; /* Space for mobile nav */
   }
 }
 

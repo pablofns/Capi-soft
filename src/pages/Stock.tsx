@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   getProducts, getSuppliers, getClients,
-  getPurchases, savePurchase, getSales, saveSale,
+  savePurchase, saveSale,
   getProductStock, type Product, type Supplier, type Client
 } from '../lib/store';
 import { Modal } from '../components/ui/Modal';

@@ -7,7 +7,7 @@ import {
 import { Modal } from '../components/ui/Modal';
 import {
   FileText, Plus, Trash2, CheckCircle, XCircle,
-  Send, Clock, Printer, Pencil
+  Send, Clock, Printer, Pencil, MessageCircle
 } from 'lucide-react';
 
 const STATUS_CONFIG: Record<QuoteStatus, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
@@ -128,18 +128,77 @@ export const Quotes: React.FC = () => {
     win.document.write(`
       <html><head><title>Presupuesto</title>
       <style>
-        body { font-family: Arial, sans-serif; padding: 2rem; color: #111; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 2rem; color: #111; max-width: 800px; margin: 0 auto; }
+        .print-header { display: flex; align-items: center; gap: 1.5rem; margin-bottom: 2rem; border-bottom: 2px solid #f0f0f0; padding-bottom: 1rem; }
+        .logo-img { width: 80px; height: 80px; object-fit: contain; }
+        .brand-info h1 { margin: 0; font-size: 1.8rem; color: #333; }
+        .brand-info p { margin: 2px 0 0; color: #666; font-size: 0.9rem; }
+
+        .quote-info { display: flex; justify-content: space-between; margin-bottom: 2rem; background: #f9f9f9; padding: 1rem; border-radius: 8px; }
+        .info-block h3 { margin: 0 0 0.5rem; font-size: 0.8rem; text-transform: uppercase; color: #888; letter-spacing: 0.5px; }
+        .info-block p { margin: 0; font-weight: 600; color: #333; }
+
         table { width: 100%; border-collapse: collapse; margin-top: 1.5rem; }
-        th { background: #f5f5f5; padding: 0.75rem; text-align: left; font-size: 0.85rem; }
-        td { padding: 0.75rem; border-bottom: 1px solid #eee; }
-        .total { font-size: 1.5rem; font-weight: bold; }
-        .header { display: flex; justify-content: space-between; margin-bottom: 2rem; }
-        h1 { font-size: 1.8rem; margin: 0; }
-        .label { color: #666; font-size: 0.8rem; }
+        th { background: #f5f5f5; padding: 0.75rem; text-align: left; font-size: 0.85rem; border-bottom: 2px solid #ddd; }
+        td { padding: 0.75rem; border-bottom: 1px solid #eee; font-size: 0.95rem; }
+
+        .totals-section { margin-top: 2rem; display: flex; justify-content: flex-end; }
+        .totals-table { width: 250px; }
+        .totals-table tr td:first-child { text-align: right; color: #666; font-size: 0.9rem; }
+        .totals-table tr td:last-child { text-align: right; font-weight: 600; }
+        .totals-table .total-row td { padding-top: 1rem; border-bottom: none; }
+        .totals-table .total-row .total-val { font-size: 1.4rem; color: #e65100; font-weight: 800; }
+
+        .notes-section { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #eee; }
+        .notes-section h3 { font-size: 0.9rem; margin-bottom: 0.5rem; color: #555; }
+        .notes-section p { font-size: 0.85rem; color: #666; line-height: 1.5; white-space: pre-wrap; }
+
+        @media print {
+          body { padding: 0; }
+          .no-print { display: none; }
+        }
       </style></head><body>${printContent}</body></html>
     `);
     win.document.close();
     win.print();
+  };
+ 
+  const handleWhatsAppShare = () => {
+    if (!viewQuote) return;
+    const client = clients.find(c => c.id === viewQuote.clientId);
+    if (!client || !client.phone) {
+      alert('El cliente no tiene un número de teléfono registrado.');
+      return;
+    }
+
+    const q = viewQuote;
+    const qSubtotal = q.items.reduce((acc, i) => acc + (i.unitPrice * i.quantity), 0);
+    const qShipping = q.totalAmount - qSubtotal;
+
+    let message = `*Presupuesto - Capi Sport*\n\n`;
+    message += `Hola ${client.name},\nTe enviamos el presupuesto solicitado:\n\n`;
+    
+    q.items.forEach(item => {
+      message += `• ${getProductName(item.productId)} (${item.quantity}u.): ${fmtPrice.format(item.unitPrice * item.quantity)}\n`;
+    });
+
+    if (qShipping > 0) {
+      message += `\nEnvío: ${fmtPrice.format(qShipping)}`;
+    } else {
+      message += `\nEnvío: ¡Bonificado!`;
+    }
+
+    message += `\n*TOTAL: ${fmtPrice.format(q.totalAmount)}*\n`;
+    message += `\n_Válido hasta: ${fmtDate(q.validUntil)}_\n`;
+    
+    if (q.notes) {
+      message += `\nNotas: ${q.notes}`;
+    }
+
+    const encodedMessage = encodeURIComponent(message);
+    const cleanPhone = client.phone.replace(/[^0-9]/g, '');
+    const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
+    window.open(whatsappUrl, '_blank');
   };
 
   const fmtPrice = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' });
@@ -149,7 +208,7 @@ export const Quotes: React.FC = () => {
   const getProductName = (id: string) => products.find(p => p.id === id)?.name || 'Desconocido';
 
   return (
-    <div style={{ display: 'flex', gap: '2rem', height: '100%' }}>
+    <div className="quotes-container" style={{ display: 'flex', gap: '2rem', height: '100%' }}>
       {/* Left: List */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
@@ -201,138 +260,200 @@ export const Quotes: React.FC = () => {
       {/* Right: Detail Panel */}
       {viewQuote && (() => {
         const q = viewQuote;
-        const cfg = STATUS_CONFIG[q.status];
+        const qSubtotal = q.items.reduce((acc, i) => acc + (i.unitPrice * i.quantity), 0);
+        const qShipping = q.totalAmount - qSubtotal;
         return (
-          <div className="glass-panel" style={{ width: '420px', flexShrink: 0, padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', maxHeight: 'calc(100vh - 8rem)', overflowY: 'auto' }}>
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <h2 style={{ fontSize: '1.3rem', marginBottom: '0.2rem' }}>{getClientName(q.clientId)}</h2>
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                  Emitido: {fmtDate(q.date)} · Válido hasta: {fmtDate(q.validUntil)}
-                </div>
-              </div>
-              <button onClick={() => handleDelete(q.id)} style={{ background: 'none', border: 'none', color: 'var(--danger-color)', cursor: 'pointer', padding: '0.3rem' }}>
-                <Trash2 size={18} />
-              </button>
-            </div>
-
-            {/* Status selector */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Estado</label>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                {(Object.keys(STATUS_CONFIG) as QuoteStatus[]).map(s => {
-                  const c = STATUS_CONFIG[s];
-                  return (
-                    <button
-                      key={s}
-                      onClick={() => handleStatusChange(q.id, s)}
-                      style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '0.3rem 0.75rem', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '0.8rem', fontWeight: q.status === s ? 700 : 400, background: q.status === s ? c.bg : 'rgba(255,255,255,0.04)', color: q.status === s ? c.color : 'var(--text-muted)', outline: q.status === s ? `1px solid ${c.color}` : 'none' }}
-                    >
-                      {c.icon} {c.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Items table */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>Detalle de Ítems</label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {q.items.map((item, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-md)' }}>
-                    <div>
-                      <div style={{ fontWeight: 500, fontSize: '0.95rem' }}>{getProductName(item.productId)}</div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.quantity} u. × {fmtPrice.format(item.unitPrice)}</div>
-                    </div>
-                    <div style={{ fontWeight: 700 }}>{fmtPrice.format(item.unitPrice * item.quantity)}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Envío + Total */}
-            {(() => {
-              const qSubtotal = q.items.reduce((acc, i) => acc + (i.unitPrice * i.quantity), 0);
-              const qShipping = q.totalAmount - qSubtotal;
-              const qFreeShipping = qShipping === 0;
-              return (
-                <div style={{ borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,90,0,0.2)', overflow: 'hidden' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.6rem 1rem', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,90,0,0.1)' }}>
-                    <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Subtotal</span>
-                    <span style={{ fontWeight: 600 }}>{fmtPrice.format(qSubtotal)}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.6rem 1rem', background: qFreeShipping ? 'rgba(76,175,80,0.06)' : 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,90,0,0.1)' }}>
-                    <span style={{ fontSize: '0.85rem', color: qFreeShipping ? '#4caf50' : 'var(--text-muted)' }}>
-                      🚚 Envío {qFreeShipping ? '(bonificado)' : ''}
-                    </span>
-                    <span style={{ fontWeight: 600, color: qFreeShipping ? '#4caf50' : 'inherit' }}>
-                      {qFreeShipping ? '$ 0,00' : fmtPrice.format(qShipping)}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', background: 'rgba(255,90,0,0.08)' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>TOTAL</span>
-                    <span style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--primary-color)' }}>{fmtPrice.format(q.totalAmount)}</span>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {q.notes && (
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Notas</label>
-                <p style={{ fontSize: '0.9rem', background: 'rgba(255,255,255,0.03)', padding: '0.75rem', borderRadius: 'var(--radius-md)', whiteSpace: 'pre-wrap' }}>{q.notes}</p>
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button
-                onClick={() => handleEdit(q)}
-                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.85rem', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)', color: 'white', cursor: 'pointer', fontWeight: 600 }}
-              >
-                <Pencil size={18} /> Editar
-              </button>
-              <button
-                onClick={handlePrint}
-                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.85rem', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)', color: 'white', cursor: 'pointer', fontWeight: 600 }}
-              >
-                <Printer size={18} /> Imprimir
-              </button>
-            </div>
-
-            {/* Hidden printable version */}
-            <div ref={printRef} style={{ display: 'none' }}>
-              <div className="header">
+          <>
+            {/* Backdrop for detail panel on mobile */}
+            <div 
+              className="mobile-backdrop" 
+              onClick={() => setViewQuote(null)}
+              aria-hidden="true"
+            />
+            <div className="glass-panel quote-detail-panel" style={{ width: '420px', flexShrink: 0, padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', maxHeight: 'calc(100vh - 8rem)', overflowY: 'auto' }}>
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                  <h1>Presupuesto</h1>
-                  <p className="label">Fecha: {fmtDate(q.date)} · Válido hasta: {fmtDate(q.validUntil)}</p>
+                  <h2 style={{ fontSize: '1.3rem', marginBottom: '0.2rem' }}>{getClientName(q.clientId)}</h2>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                    Emitido: {fmtDate(q.date)} · Válido hasta: {fmtDate(q.validUntil)}
+                  </div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <strong>Cliente:</strong><br />
-                  {getClientName(q.clientId)}
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button onClick={() => handleDelete(q.id)} style={{ background: 'none', border: 'none', color: 'var(--danger-color)', cursor: 'pointer', padding: '0.3rem' }} title="Eliminar">
+                    <Trash2 size={18} />
+                  </button>
+                  <button onClick={() => setViewQuote(null)} className="mobile-only" style={{ background: 'rgba(255,255,255,0.05)', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.3rem', borderRadius: 'var(--radius-md)' }}>
+                    <XCircle size={18} />
+                  </button>
                 </div>
               </div>
-              <table>
-                <thead><tr><th>Producto</th><th>Cantidad</th><th>Precio Unit.</th><th>Subtotal</th></tr></thead>
-                <tbody>
+
+              {/* Status selector */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Estado</label>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {(Object.keys(STATUS_CONFIG) as QuoteStatus[]).map(s => {
+                    const c = STATUS_CONFIG[s];
+                    return (
+                      <button
+                        key={s}
+                        onClick={() => handleStatusChange(q.id, s)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '0.3rem 0.75rem', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '0.8rem', fontWeight: q.status === s ? 700 : 400, background: q.status === s ? c.bg : 'rgba(255,255,255,0.04)', color: q.status === s ? c.color : 'var(--text-muted)', outline: q.status === s ? `1px solid ${c.color}` : 'none' }}
+                      >
+                        {c.icon} {c.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Items table */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>Detalle de Ítems</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   {q.items.map((item, i) => (
-                    <tr key={i}>
-                      <td>{getProductName(item.productId)}</td>
-                      <td>{item.quantity}</td>
-                      <td>{fmtPrice.format(item.unitPrice)}</td>
-                      <td>{fmtPrice.format(item.unitPrice * item.quantity)}</td>
-                    </tr>
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-md)' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 500, fontSize: '0.95rem' }}>{getProductName(item.productId)}</div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.quantity} u. × {fmtPrice.format(item.unitPrice)}</div>
+                      </div>
+                      <div style={{ fontWeight: 700, marginLeft: '1rem', whiteSpace: 'nowrap' }}>{fmtPrice.format(item.unitPrice * item.quantity)}</div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
-              <div style={{ marginTop: '2rem', textAlign: 'right' }}>
-                <p className="label">TOTAL</p>
-                <p className="total">{fmtPrice.format(q.totalAmount)}</p>
+                </div>
               </div>
-              {q.notes && <p style={{ marginTop: '2rem', fontSize: '0.85rem', color: '#666' }}><strong>Notas:</strong> {q.notes}</p>}
+
+              {/* Envío + Total */}
+              {(() => {
+                const qFreeShipping = qShipping === 0;
+                return (
+                  <div style={{ borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,90,0,0.2)', overflow: 'hidden' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.6rem 1rem', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,90,0,0.1)' }}>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Subtotal</span>
+                      <span style={{ fontWeight: 600 }}>{fmtPrice.format(qSubtotal)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.6rem 1rem', background: qFreeShipping ? 'rgba(76,175,80,0.06)' : 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,90,0,0.1)' }}>
+                      <span style={{ fontSize: '0.85rem', color: qFreeShipping ? '#4caf50' : 'var(--text-muted)' }}>
+                        🚚 Envío {qFreeShipping ? '(bonificado)' : ''}
+                      </span>
+                      <span style={{ fontWeight: 600, color: qFreeShipping ? '#4caf50' : 'inherit' }}>
+                        {qFreeShipping ? '$ 0,00' : fmtPrice.format(qShipping)}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', background: 'rgba(255,90,0,0.08)' }}>
+                      <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>TOTAL</span>
+                      <span style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--primary-color)' }}>{fmtPrice.format(q.totalAmount)}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {q.notes && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Notas</label>
+                  <p style={{ fontSize: '0.9rem', background: 'rgba(255,255,255,0.03)', padding: '0.75rem', borderRadius: 'var(--radius-md)', whiteSpace: 'pre-wrap' }}>{q.notes}</p>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  onClick={() => handleEdit(q)}
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.85rem', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)', color: 'white', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  <Pencil size={18} /> Editar
+                </button>
+                <button
+                  onClick={handlePrint}
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.85rem', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)', color: 'white', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  <Printer size={18} /> Imprimir
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '-0.5rem' }}>
+                <button
+                  onClick={handleWhatsAppShare}
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.85rem', background: '#25D366', border: 'none', borderRadius: 'var(--radius-md)', color: 'white', cursor: 'pointer', fontWeight: 700 }}
+                >
+                  <MessageCircle size={18} /> Enviar WhatsApp
+                </button>
+              </div>
+
+              {/* Hidden printable version */}
+              <div ref={printRef} style={{ display: 'none' }}>
+                <div className="print-header">
+                  <img src="/Capi-logo.png" className="logo-img" alt="Logo" />
+                  <div className="brand-info">
+                    <h1>Capi Sport Paraná</h1>
+                    <p>Indumentaria Deportiva & Personalizados</p>
+                  </div>
+                </div>
+
+                <div className="quote-info">
+                  <div className="info-block">
+                    <h3>Cliente</h3>
+                    <p>{getClientName(q.clientId)}</p>
+                  </div>
+                  <div className="info-block">
+                    <h3>Fecha</h3>
+                    <p>{fmtDate(q.date)}</p>
+                  </div>
+                  <div className="info-block">
+                    <h3>Válido hasta</h3>
+                    <p>{fmtDate(q.validUntil)}</p>
+                  </div>
+                </div>
+
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th style={{ textAlign: 'center' }}>Cant.</th>
+                      <th style={{ textAlign: 'right' }}>Precio Unit.</th>
+                      <th style={{ textAlign: 'right' }}>Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {q.items.map((item, i) => (
+                      <tr key={i}>
+                        <td>{getProductName(item.productId)}</td>
+                        <td style={{ textAlign: 'center' }}>{item.quantity}</td>
+                        <td style={{ textAlign: 'right' }}>{fmtPrice.format(item.unitPrice)}</td>
+                        <td style={{ textAlign: 'right' }}>{fmtPrice.format(item.unitPrice * item.quantity)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                <div className="totals-section">
+                  <table className="totals-table">
+                    <tbody>
+                      <tr>
+                        <td>Subtotal:</td>
+                        <td>{fmtPrice.format(qSubtotal)}</td>
+                      </tr>
+                      <tr>
+                        <td>Envío:</td>
+                        <td>{qShipping === 0 ? '$ 0,00' : fmtPrice.format(qShipping)}</td>
+                      </tr>
+                      <tr className="total-row">
+                        <td>TOTAL:</td>
+                        <td className="total-val">{fmtPrice.format(q.totalAmount)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {q.notes && (
+                  <div className="notes-section">
+                    <h3>Notas y Condiciones</h3>
+                    <p>{q.notes}</p>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          </>
         );
       })()}
 
@@ -470,6 +591,45 @@ export const Quotes: React.FC = () => {
       <style>{`
         .q-input { width: 100%; padding: 0.75rem; border-radius: var(--radius-md); border: 1px solid var(--surface-border); background: rgba(0,0,0,0.3); color: white; outline: none; transition: border-color 0.2s; box-sizing: border-box; }
         .q-input:focus { border-color: var(--primary-color); }
+
+        .mobile-only { display: none; }
+        .mobile-backdrop { display: none; }
+
+        @media (max-width: 1024px) {
+          .quotes-container { flex-direction: column !important; }
+          .quote-detail-panel { 
+            position: fixed !important;
+            top: 50% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            width: 90% !important;
+            height: auto !important;
+            max-height: 85vh !important;
+            z-index: 1000;
+            border-radius: var(--radius-lg) !important;
+            background: #1a1a1a !important;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5) !important;
+            border: 1px solid var(--surface-border) !important;
+            animation: fade-in-scale 0.3s ease-out;
+          }
+          .mobile-only { display: flex; }
+          .mobile-backdrop { 
+            display: block;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(4px);
+            z-index: 999;
+          }
+        }
+
+        @keyframes fade-in-scale {
+          from { opacity: 0; transform: translate(-50%, -40%) scale(0.95); }
+          to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        }
       `}</style>
     </div>
   );

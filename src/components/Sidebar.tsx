@@ -3,7 +3,12 @@ import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, Users, Package, Settings, LogOut, Building2, FileText } from 'lucide-react';
 import './Sidebar.css';
 
-export const Sidebar: React.FC = () => {
+interface SidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const navItems = [
     { to: '/', icon: <LayoutDashboard size={20} />, label: 'Dashboard' },
     { to: '/suppliers', icon: <Users size={20} />, label: 'Proveedores' },
@@ -13,8 +18,14 @@ export const Sidebar: React.FC = () => {
     { to: '/quotes', icon: <FileText size={20} />, label: 'Presupuestos' },
   ];
 
+  const handleNavClick = () => {
+    if (window.innerWidth <= 768 && onClose) {
+      onClose();
+    }
+  };
+
   return (
-    <aside className="sidebar glass-panel">
+    <aside className={`sidebar glass-panel ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-header">
         <div className="logo-container">
           <div className="logo-icon">CS</div>
@@ -28,6 +39,7 @@ export const Sidebar: React.FC = () => {
             key={item.to}
             to={item.to}
             className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+            onClick={handleNavClick}
           >
             {item.icon}
             <span>{item.label}</span>
