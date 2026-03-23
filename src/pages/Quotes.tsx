@@ -9,6 +9,10 @@ import {
   FileText, Plus, Trash2, CheckCircle, XCircle,
   Send, Clock, Printer, Pencil, MessageCircle
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { Share } from '@capacitor/share';
+import { Filesystem, Directory } from '@capacitor/filesystem';
 
 const STATUS_CONFIG: Record<QuoteStatus, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
   borrador: { label: 'Borrador', color: '#aaa', bg: 'rgba(170,170,170,0.1)', icon: <Clock size={14} /> },
@@ -162,43 +166,133 @@ export const Quotes: React.FC = () => {
     win.document.close();
     win.print();
   };
- 
-  const handleWhatsAppShare = () => {
+
+  const handleWhatsAppShare = async () => {
     if (!viewQuote) return;
     const client = clients.find(c => c.id === viewQuote.clientId);
-    if (!client || !client.phone) {
-      alert('El cliente no tiene un número de teléfono registrado.');
-      return;
+    if (!client) return;
+
+    try {
+      const q = viewQuote;
+      const qSubtotal = q.items.reduce((acc, i) => acc + (i.unitPrice * i.quantity), 0);
+      const qShipping = q.totalAmount - qSubtotal;
+
+      const doc = new jsPDF();
+
+      // Intentar cargar el logo
+      try {
+        const logoImg = new Image();
+        logoImg.src = '/Capi-logo.png';
+        await new Promise((resolve, reject) => {
+          logoImg.onload = resolve;
+          logoImg.onerror = reject;
+        });
+        doc.addImage(logoImg, 'PNG', 15, 10, 30, 30);
+      } catch (e) {
+        // Fallback si no hay logo
+        doc.setFontSize(20);
+        doc.setTextColor(255, 90, 0);
+        doc.text('CAPI SPORT', 15, 25);
+      }
+
+      doc.setFontSize(16);
+      doc.setTextColor(0, 0, 0);
+      doc.text('Capi Sport Paraná', 50, 20);
+      doc.setFontSize(10);
+      doc.text('Elementos de entrenamiento y accesorios.', 50, 26);
+      
+      doc.setFontSize(9);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Presupuesto: #${q.id.slice(0, 8)}`, 150, 20);
+      doc.text(`Fecha: ${fmtDate(q.date)}`, 150, 25);
+      doc.text(`Vence: ${fmtDate(q.validUntil)}`, 150, 30);
+
+      // Info Cliente
+      doc.setDrawColor(240, 240, 240);
+      doc.line(15, 45, 195, 45);
+      doc.setFontSize(11);
+      doc.setTextColor(0, 0, 0);
+      doc.text('DATOS DEL CLIENTE', 15, 52);
+      doc.setFontSize(10);
+      doc.text(`Nombre: ${client.name}`, 15, 58);
+      doc.text(`Teléfono: ${client.phone}`, 15, 63);
+
+      // Tabla de items
+      const tableData = q.items.map(item => [
+        getProductName(item.productId),
+        item.quantity,
+        fmtPrice.format(item.unitPrice),
+        fmtPrice.format(item.unitPrice * item.quantity)
+      ]);
+
+      autoTable(doc, {
+        startY: 75,
+        head: [['Detalle de Producto', 'Cant.', 'Precio Unit.', 'Subtotal']],
+        body: tableData,
+        foot: [
+          ['', '', 'SUBTOTAL', fmtPrice.format(qSubtotal)],
+          ['', '', 'ENVÍO', qShipping === 0 ? '$ 0,00' : fmtPrice.format(qShipping)],
+          ['', '', 'TOTAL', fmtPrice.format(q.totalAmount)]
+        ],
+        headStyles: { fillColor: [255, 90, 0], textColor: [255, 255, 255], fontStyle: 'bold' },
+        footStyles: { fillColor: [245, 245, 245], textColor: [0, 0, 0], fontStyle: 'bold' },
+        columnStyles: {
+          1: { halign: 'center' },
+          2: { halign: 'right' },
+          3: { halign: 'right' }
+        },
+        theme: 'grid',
+        margin: { left: 15, right: 15 }
+      });
+
+      if (q.notes) {
+        const finalY = (doc as any).lastAutoTable.finalY + 10;
+        doc.setFontSize(10);
+        doc.text('Notas:', 15, finalY);
+        doc.setFontSize(9);
+        doc.setTextColor(80, 80, 80);
+        doc.text(q.notes, 15, finalY + 5, { maxWidth: 180 });
+      }
+
+      // Nombre del archivo: [cliente]-[fecha-hora].pdf
+      const now = new Date();
+      const timestamp = `${now.toLocaleDateString('es-AR').replace(/\//g, '-')}_${now.getHours()}-${now.getMinutes()}`;
+      const fileName = `${client.name.replace(/\s+/g, '_')}-${timestamp}.pdf`;
+
+      const pdfBase64 = doc.output('datauristring').split(',')[1];
+
+      // Detect Capacitor
+      const isPushEnabled = window.hasOwnProperty('Capacitor');
+
+      if (isPushEnabled) {
+        const savedFile = await Filesystem.writeFile({
+          path: fileName,
+          data: pdfBase64,
+          directory: Directory.Cache,
+        });
+
+        await Share.share({
+          title: 'Presupuesto Capi Sport',
+          text: `Presupuesto para ${client.name}`,
+          url: savedFile.uri,
+          dialogTitle: 'Enviar por WhatsApp',
+        });
+      } else {
+        // En web simplemente descargamos
+        doc.save(fileName);
+      }
+
+      // Abrir chat de WhatsApp
+      if (client.phone) {
+        const cleanPhone = client.phone.replace(/[^0-9]/g, '');
+        const whatsappUrl = `https://wa.me/${cleanPhone}`;
+        window.open(whatsappUrl, '_blank');
+      }
+
+    } catch (err) {
+      console.error('Error sharing PDF:', err);
+      alert('Error al generar o compartir el PDF. Verifique los permisos.');
     }
-
-    const q = viewQuote;
-    const qSubtotal = q.items.reduce((acc, i) => acc + (i.unitPrice * i.quantity), 0);
-    const qShipping = q.totalAmount - qSubtotal;
-
-    let message = `*Presupuesto - Capi Sport*\n\n`;
-    message += `Hola ${client.name},\nTe enviamos el presupuesto solicitado:\n\n`;
-    
-    q.items.forEach(item => {
-      message += `• ${getProductName(item.productId)} (${item.quantity}u.): ${fmtPrice.format(item.unitPrice * item.quantity)}\n`;
-    });
-
-    if (qShipping > 0) {
-      message += `\nEnvío: ${fmtPrice.format(qShipping)}`;
-    } else {
-      message += `\nEnvío: ¡Bonificado!`;
-    }
-
-    message += `\n*TOTAL: ${fmtPrice.format(q.totalAmount)}*\n`;
-    message += `\n_Válido hasta: ${fmtDate(q.validUntil)}_\n`;
-    
-    if (q.notes) {
-      message += `\nNotas: ${q.notes}`;
-    }
-
-    const encodedMessage = encodeURIComponent(message);
-    const cleanPhone = client.phone.replace(/[^0-9]/g, '');
-    const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
-    window.open(whatsappUrl, '_blank');
   };
 
   const fmtPrice = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' });
@@ -265,8 +359,8 @@ export const Quotes: React.FC = () => {
         return (
           <>
             {/* Backdrop for detail panel on mobile */}
-            <div 
-              className="mobile-backdrop" 
+            <div
+              className="mobile-backdrop"
               onClick={() => setViewQuote(null)}
               aria-hidden="true"
             />
@@ -386,7 +480,7 @@ export const Quotes: React.FC = () => {
                   <img src="/Capi-logo.png" className="logo-img" alt="Logo" />
                   <div className="brand-info">
                     <h1>Capi Sport Paraná</h1>
-                    <p>Indumentaria Deportiva & Personalizados</p>
+                    <p>Elementos de entrenamiento y accesorios.</p>
                   </div>
                 </div>
 
