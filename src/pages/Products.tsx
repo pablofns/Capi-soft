@@ -7,13 +7,15 @@ import {
 import { Modal } from '../components/ui/Modal';
 import {
   Trash2, Link as LinkIcon, Image as ImageIcon,
-  Tag, ChevronLeft, ChevronRight, Plus
+  Tag, ChevronLeft, ChevronRight, Plus, Pencil, Check, X
 } from 'lucide-react';
+import { updateLatestSalePrice, getLatestPurchaseData } from '../lib/store';
 
 export const Products: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [productPurchaseData, setProductPurchaseData] = useState<Record<string, { unitCost: number, finalUnitCost: number, salePrice: number }>>({});
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | 'all'>('all');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -40,6 +42,13 @@ export const Products: React.FC = () => {
     setProducts(prods);
     setSuppliers(sups);
     setCategories(cats);
+
+    // Fetch purchase details for each product
+    const pData: Record<string, any> = {};
+    await Promise.all(prods.map(async (p) => {
+      pData[p.id] = await getLatestPurchaseData(p.id);
+    }));
+    setProductPurchaseData(pData);
   };
 
   const handleAddCategory = async (e: React.FormEvent) => {
@@ -224,6 +233,13 @@ export const Products: React.FC = () => {
               onDelete={handleDeleteProduct}
               supplierName={getSupplierName(product.supplierId)}
               categories={categories}
+              purchaseData={productPurchaseData[product.id] || { unitCost: 0, finalUnitCost: 0, salePrice: 0 }}
+              onPriceUpdate={(newPrice) => {
+                setProductPurchaseData(prev => ({
+                  ...prev,
+                  [product.id]: { ...(prev[product.id] || { unitCost: 0, finalUnitCost: 0 }), salePrice: newPrice }
+                }));
+              }}
             />
           ))
         )}
@@ -386,14 +402,21 @@ export const Products: React.FC = () => {
   );
 };
 
-// Subcomponent for Product Card with Gallery
 const ProductCard: React.FC<{
   product: Product,
   onDelete: (id: string) => void,
   supplierName: string,
   categories: Category[],
-}> = ({ product, onDelete, supplierName, categories }) => {
+  purchaseData: { unitCost: number, finalUnitCost: number, salePrice: number },
+  onPriceUpdate: (newPrice: number) => void
+}> = ({ product, onDelete, supplierName, categories, purchaseData, onPriceUpdate }) => {
   const [currentImgIdx, setCurrentImgIdx] = useState(0);
+  const [isEditingPrice, setIsEditingPrice] = useState(false);
+  const [tempPrice, setTempPrice] = useState(purchaseData.salePrice || product.price || 0);
+
+  useEffect(() => {
+    setTempPrice(purchaseData.salePrice || product.price || 0);
+  }, [purchaseData.salePrice, product.price]);
   const images = product.imageUrls && product.imageUrls.length > 0 ? product.imageUrls : [];
 
   const nextImg = (e: React.MouseEvent) => {
@@ -405,6 +428,18 @@ const ProductCard: React.FC<{
     e.stopPropagation();
     setCurrentImgIdx((prev) => (prev - 1 + images.length) % images.length);
   };
+
+  const handleSavePrice = async () => {
+    await updateLatestSalePrice(product.id, tempPrice);
+    onPriceUpdate(tempPrice);
+    setIsEditingPrice(false);
+  };
+
+  const { unitCost, finalUnitCost, salePrice } = purchaseData;
+  const shippingProportion = finalUnitCost - unitCost;
+  const currentPrice = salePrice || product.price || 0;
+  const margin = finalUnitCost > 0 ? (currentPrice - finalUnitCost) / finalUnitCost * 100 : 0;
+  const fmtPrice = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' });
 
   return (
     <div className="glass-panel animate-fade-in" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '100%', gap: 0 }}>
@@ -454,6 +489,49 @@ const ProductCard: React.FC<{
 
         <h3 style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>{product.name}</h3>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1rem', flex: 1, lineHeight: 1.4 }}>{product.details}</p>
+
+        {/* Price and Cost Section */}
+        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)', marginBottom: '1.5rem' }}>
+          <div style={{ marginBottom: '0.75rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Costo Final:</span>
+              <span style={{ fontSize: '1rem', fontWeight: 700, color: 'white' }}>{finalUnitCost > 0 ? fmtPrice.format(finalUnitCost) : '$ ---'}</span>
+            </div>
+            {finalUnitCost > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
+                <span>Neto: {fmtPrice.format(unitCost)}</span>
+                <span>+ Envío: {fmtPrice.format(shippingProportion)}</span>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Precio Venta:</span>
+            {isEditingPrice ? (
+              <div style={{ display: 'flex', gap: '0.4rem' }}>
+                <input
+                  type="number"
+                  value={tempPrice}
+                  onChange={(e) => setTempPrice(parseFloat(e.target.value) || 0)}
+                  style={{ width: '80px', padding: '0.2rem 0.4rem', background: 'rgba(0,0,0,0.3)', color: 'white', border: '1px solid var(--primary-color)', borderRadius: '4px', fontSize: '0.85rem' }}
+                />
+                <button onClick={handleSavePrice} style={{ background: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: '4px', padding: '0.2rem', cursor: 'pointer', display: 'flex' }}><Check size={14} /></button>
+                <button onClick={() => { setIsEditingPrice(false); setTempPrice(currentPrice); }} style={{ background: 'rgba(255,59,48,0.2)', color: 'var(--danger-color)', border: 'none', borderRadius: '4px', padding: '0.2rem', cursor: 'pointer', display: 'flex' }}><X size={14} /></button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--primary-color)' }}>{fmtPrice.format(currentPrice)}</span>
+                <button onClick={() => setIsEditingPrice(true)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}><Pencil size={12} /></button>
+              </div>
+            )}
+          </div>
+          {finalUnitCost > 0 && currentPrice > 0 && (
+            <div style={{ marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+              <span style={{ color: 'var(--text-muted)' }}>Margen de ganancia:</span>
+              <span style={{ color: margin > 0 ? '#4caf50' : '#ff3b30', fontWeight: 700 }}>{margin.toFixed(1)}%</span>
+            </div>
+          )}
+        </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 'auto' }}>
           <div>
